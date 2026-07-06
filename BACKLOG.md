@@ -134,6 +134,82 @@ so there's a record of what's already been resolved.
   > and isn't fork-specific) rather than kept as a fork-only customization
   > — flag that choice back to me rather than assuming either way.
 
+### [feature] Theme Pack system (bundled, per-deployment branding)
+
+- **Status:** open
+- **Source:** 2026-07-06 planning discussion
+- **Motivation:** not just cosmetic options for one player — the real goal
+  is per-deployment branding. If I end up hosting this at multiple
+  subdomains (e.g. `phase.teamserio.us` vs. a hypothetical
+  clevelandrocs-flavored instance), each deployment should be able to ship
+  a different **default look** as one bundled unit, while individual
+  players can still override pieces for themselves. This depends on the
+  card-back-art item above as one of its building blocks — do that one
+  first, then build the pack registry on top of it plus the two systems
+  that already exist.
+- **Context (verified against the repo, not assumed):**
+  - **Two real precedents to generalize from, don't invent a third
+    pattern:** the audio theme registry
+    (`client/src/audio/themeRegistry.ts` — `BUILT_IN_THEMES`, validated
+    JSON manifest, load-by-URL, IndexedDB cache) and the board-background
+    preference (`boardBackground`/`customBackgroundUrl`,
+    `BattlefieldBackground.tsx:20-54`). A "theme pack" is naturally a
+    manifest that bundles: a palette (see below), a card back URL (once
+    the item above ships), a board-skin selection, and an audio theme
+    reference — i.e. compose the two existing per-facet systems plus two
+    new facets into one selectable unit, rather than building a
+    from-scratch bundling mechanism.
+  - **Curated background art is currently a single global, hardcoded
+    list**, not scoped per anything: `BATTLEFIELDS` in
+    `client/src/components/board/battlefields.ts` (flat array, one fixed
+    set for every player/deployment). "Set the curated art for
+    backgrounds" (per pack) means this list needs to become
+    pack-scoped/overridable rather than a single module-level constant —
+    same shape of change as making `CARD_BACK_URL` configurable.
+  - **Color palette has no runtime system at all today** — single static
+    `@theme` block in `client/src/index.css:20-96` (Tailwind v4's
+    CSS-native config; there is no `tailwind.config.*` to layer variants
+    onto). Making the palette swappable is the one facet with no existing
+    precedent to mirror — likely needs its own small registry (CSS custom
+    properties swapped via a `data-theme-pack` attribute on `<html>`,
+    analogous to how the existing dark/light `data-theme` toggle already
+    works per the artifact-design conventions used elsewhere) rather than
+    literally copying the audio/board pattern.
+  - **Card frame / card face style is UNINVESTIGATED** — no research done
+    yet on how individual card rendering works or whether it's realistically
+    swappable. Do not assume it's a small change; investigate the actual
+    card-rendering component(s) first as step 1 of implementing this, and
+    report back what's actually involved before committing to scope.
+  - Per-deployment default selection likely wants a build-time or
+    server-config mechanism (env var read at build, or a config JSON
+    served alongside `card-data.json`) rather than requiring every new
+    visitor to manually pick a pack — but confirm this against how
+    `client/public/*` config/meta files are already loaded before
+    designing a new one.
+- **Prompt:**
+  > Design (don't implement yet) a Theme Pack system for phase.rs that
+  > bundles: color palette, board-skin (background image + a pack-scoped
+  > curated art list, generalizing the current global `BATTLEFIELDS` in
+  > `client/src/components/board/battlefields.ts`), card back art (once
+  > the separate card-back-art backlog item ships), and an audio theme
+  > reference (`client/src/audio/themeRegistry.ts`) into one selectable
+  > unit. Goal: a given deployment (e.g. `phase.teamserio.us`) can ship
+  > with its own default pack while individual players can still override
+  > any single facet via existing per-facet preferences. Explicitly
+  > investigate and report on card frame/face rendering (how individual
+  > cards are drawn today, whether style is realistically swappable)
+  > before scoping that facet in or out — this hasn't been researched yet.
+  > For the color palette facet, propose a mechanism analogous to the
+  > existing dark/light theme toggle (a root attribute swapping CSS custom
+  > properties) rather than a new one-off system. Reuse the audio-theme
+  > registry's manifest/validation/caching pattern for the pack manifest
+  > itself rather than inventing new loading/caching logic. Produce a plan
+  > with the mandatory `/engine-planner`-style architectural sections
+  > (though this is frontend-only, no engine involvement) — pattern
+  > coverage, building-block reuse, logic placement — then stop for review
+  > before writing code, since this touches several existing preference
+  > systems and a wrong seam here is expensive to unwind later.
+
 ---
 
 ## Done

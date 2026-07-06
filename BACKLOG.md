@@ -37,12 +37,17 @@ so there's a record of what's already been resolved.
   its config lives only on the host, not in any repo; `teamserio.us`
   itself deploys via GitHub Actions → SSH wipe + SCP copy to `/prod-www/`
   (secrets `DEPLOY_HOST`, `DEPLOY_USERNAME`, `DEPLOY_SSH_KEY`,
-  `DEPLOY_HOST_PORT`, currently only on the `teamserio.us` repo).
+  `DEPLOY_HOST_PORT`, currently only on the `teamserio.us` repo). **TLS
+  terminates at the reverse proxy itself** (confirmed by the user) — not
+  an AWS-layer component (ALB/CloudFront) in front of it, so a
+  `phase.teamserio.us` cert needs to be issued for nginx directly, not
+  requested through an AWS console/ACM flow.
 - **What's genuinely unconfirmed:**
-  1. **TLS termination point** — is it nginx + certbot/Let's Encrypt on the
-     box itself, or does an AWS-layer component (ALB, CloudFront) terminate
-     TLS in front of nginx? This changes where a `phase.teamserio.us` cert
-     needs to be issued and whether nginx even needs a cert block at all.
+  1. **Exact TLS mechanism on the box** — likely certbot/Let's Encrypt
+     given nginx terminates TLS itself, but not confirmed which ACME
+     client or whether renewal is a cron job/systemd timer — check
+     `which certbot`, `systemctl list-timers`, and `/etc/letsencrypt/`
+     (or equivalent) before assuming certbot specifically.
   2. **nginx config layout** — single `nginx.conf`, or
      `sites-available`/`sites-enabled` per-site convention? Pull the
      existing `teamserio.us` server block as the literal template to copy
@@ -72,10 +77,11 @@ so there's a record of what's already been resolved.
      keep blast radius contained if either pipeline were ever compromised).
 - **Prompt:**
   > SSH into the AWS host that serves `teamserio.us` and audit it,
-  > read-only — do not change anything. Report back on: (1) how TLS is
-  > terminated (nginx+certbot on-box, or an AWS-layer component in front —
-  > check for an ALB/CloudFront setup too, not just the box itself); (2)
-  > the nginx config layout and the literal existing server block for
+  > read-only — do not change anything. TLS is confirmed to terminate at
+  > the nginx reverse proxy itself (not an AWS-layer ALB/CloudFront), so
+  > just confirm (1) the exact mechanism (`which certbot`, look for a
+  > renewal cron/systemd timer, check `/etc/letsencrypt/` or equivalent);
+  > (2) the nginx config layout and the literal existing server block for
   > `teamserio.us` as a template; (3) OS/distro and package manager; (4)
   > whether Docker is already installed/in use; (5) where `teamserio.us`'s
   > DNS is managed; (6) available CPU/RAM/disk headroom; (7) current

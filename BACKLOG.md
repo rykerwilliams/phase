@@ -25,9 +25,71 @@ so there's a record of what's already been resolved.
 
 ## Open
 
-### [infra] Host my fork of phase.rs at phase.teamserio.us
+### [research] Audit the AWS host before hosting phase.rs there
 
 - **Status:** open
+- **Source:** 2026-07-06 planning discussion
+- **Why this is its own item:** read-only investigation, no changes to the
+  live host — cleanly separable from, and a hard prerequisite for, the
+  "Host my fork at phase.teamserio.us" item below. Do this first; it'll
+  likely change details in that item's plan.
+- **What's already confirmed** (don't re-ask): nginx is the reverse proxy;
+  its config lives only on the host, not in any repo; `teamserio.us`
+  itself deploys via GitHub Actions → SSH wipe + SCP copy to `/prod-www/`
+  (secrets `DEPLOY_HOST`, `DEPLOY_USERNAME`, `DEPLOY_SSH_KEY`,
+  `DEPLOY_HOST_PORT`, currently only on the `teamserio.us` repo).
+- **What's genuinely unconfirmed:**
+  1. **TLS termination point** — is it nginx + certbot/Let's Encrypt on the
+     box itself, or does an AWS-layer component (ALB, CloudFront) terminate
+     TLS in front of nginx? This changes where a `phase.teamserio.us` cert
+     needs to be issued and whether nginx even needs a cert block at all.
+  2. **nginx config layout** — single `nginx.conf`, or
+     `sites-available`/`sites-enabled` per-site convention? Pull the
+     existing `teamserio.us` server block as the literal template to copy
+     for `phase.teamserio.us`.
+  3. **OS/distro and package manager** on the host (`/etc/os-release`) —
+     needed to know how to install/verify Docker.
+  4. **Is Docker already installed and in use** on this host for anything?
+     `docker --version`, `docker ps`. phase-server's documented self-host
+     path (README "Dedicated Server") is Docker-based; if Docker isn't
+     already there, that's a real setup step, not a given.
+  5. **DNS management for `teamserio.us`** — Route53, the registrar
+     directly, Cloudflare, something else? Needed to add the `phase` A/CNAME
+     record. (This one may not need host SSH at all — could be checked from
+     wherever the domain's DNS is actually managed.)
+  6. **Host capacity** — `free -h`, `df -h`, `nproc`. Confirm there's room
+     for another Docker container + static site alongside the existing
+     sites before assuming it'll just fit.
+  7. **Firewall/security group** — confirm only 80/443 (or whatever's
+     already open) is exposed, and that phase-server binding to
+     `127.0.0.1` behind nginx (per README's own reverse-proxy guidance)
+     doesn't need any new inbound rule.
+  8. **Deploy secrets are per-GitHub-repo, not shared** — `DEPLOY_HOST`
+     etc. exist on the `teamserio.us` repo's GitHub settings only; the
+     fork (`rykerwilliams/phase`) will need its own copies added, or a
+     dedicated SSH key/user scoped just to the phase deploy path (worth
+     considering over reusing the exact same key as `teamserio.us`, to
+     keep blast radius contained if either pipeline were ever compromised).
+- **Prompt:**
+  > SSH into the AWS host that serves `teamserio.us` and audit it,
+  > read-only — do not change anything. Report back on: (1) how TLS is
+  > terminated (nginx+certbot on-box, or an AWS-layer component in front —
+  > check for an ALB/CloudFront setup too, not just the box itself); (2)
+  > the nginx config layout and the literal existing server block for
+  > `teamserio.us` as a template; (3) OS/distro and package manager; (4)
+  > whether Docker is already installed/in use; (5) where `teamserio.us`'s
+  > DNS is managed; (6) available CPU/RAM/disk headroom; (7) current
+  > firewall/security-group rules. Also separately note whether
+  > `DEPLOY_HOST`/`DEPLOY_USERNAME`/`DEPLOY_SSH_KEY`/`DEPLOY_HOST_PORT` are
+  > only configured as secrets on the `teamserio.us` GitHub repo (expected)
+  > and whether a dedicated, more narrowly-scoped SSH credential for the
+  > phase deploy path is worth setting up instead of reusing the existing
+  > one. Feed the findings back into the "Host my fork at
+  > phase.teamserio.us" backlog item's plan — don't implement anything yet.
+
+### [infra] Host my fork of phase.rs at phase.teamserio.us
+
+- **Status:** open (blocked on the host-audit item above)
 - **Source:** 2026-07-06 planning discussion
 - **Context (verified, not assumed):**
   - Target: run my fork at `phase.teamserio.us`, on the same AWS host that

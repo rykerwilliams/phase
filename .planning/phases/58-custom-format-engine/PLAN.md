@@ -128,6 +128,42 @@ ReprintPolicy {                         // enum — enforceable today only at se
     AllowAnyPrinting,                   // Middle School "begrudgingly"
 }
 
+// NOT YET DESIGNED — flagged, not resolved, per CONTEXT.md open item #2.
+// `ReprintPolicy` above gates LEGALITY (which printings are legal to play).
+// A user follow-up asks for a sibling, independent axis: DISPLAY DEFAULT
+// (which specific legal printing's frame/art renders by default when a card
+// is added to a deck under this format) — e.g. an old-rules format should
+// default old-frame Alpha/Beta art over a modern reprint's, without forcing
+// the player to manually pick a printing every time.
+//
+// Per CONTEXT.md's corrected finding: this is NOT the same gap as
+// ReprintPolicy's set-code-membership approximation. Legality (engine/MTGJSON,
+// set-codes only) and frame/art data (frontend/Scryfall, already has
+// released_at/border_color/frame_effects/full_art via `scryfall-printings.json`
+// + `preferencesStore`'s `ArtChainEntry`) are two disjoint systems today that
+// have never been cross-referenced. Building this means either (a) new
+// engine-owned derived state — a WASM-exposed "preferred printing for name X
+// given format Y" API, reusing `SetCatalog`/`SetMeta.release_date` (already
+// loaded, already projected to `client/public/set-list.json` for an unrelated
+// purpose) for chronological ordering — or (b) extending the frontend's
+// existing `ArtChainEntry` cosmetic-preference chain with a new variant seeded
+// by the format's reprint policy, treating this as display preference rather
+// than engine-derived game state. (a) fits "engine owns all logic" more
+// cleanly; (b) reuses a system that already does exactly this job for
+// individual players today. This fork needs the same maintainer conversation
+// as the rest of this design — do not build either without it.
+//
+// Whatever shape it takes, per CLAUDE.md's bool-vs-enum rule (and consistent
+// with ReprintPolicy itself being a 3-way enum, not a bool), a bare
+// `use_old_frame: bool` field would be the wrong shape. If/when designed, this
+// should be a typed axis analogous to `ArtChainEntry` — sketch only, NOT a
+// final design:
+//   PrintingDefault {
+//       Newest,                   // today's implicit behavior
+//       OldestLegal,              // oldest printing within this format's legal_sets
+//       SpecificSet(SetCode),     // pin to one set's frame (e.g. "Alpha only" preset)
+//   }
+
 LegacyRuleSet {                         // INDEPENDENT era-rule axes (RESEARCH §8, §10)
     mana_burn: bool,
     damage_uses_stack: bool,

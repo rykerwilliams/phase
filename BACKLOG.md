@@ -53,18 +53,88 @@ so there's a record of what's already been resolved.
   > sync it from a fresh worktree before pinging. If both have already
   > merged, mark this backlog item done.
 
-### [feature] Implement Eternal Central retro formats (Old School 93-94, Old School 95, Middle School, Classic Magic)
+### [feature] Custom/"design your own" format engine, instance-configurable — first presets: Eternal Central retro formats (93-94, 95, Middle School, Classic Magic)
 
 - **Status:** open
-- **Source:** 2026-07-07 planning discussion. Authoritative ruleset source
-  (user-provided): https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md
+- **Source:** 2026-07-07 planning discussion. Authoritative EC ruleset
+  source (user-provided): https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md
   — fetched and confirmed this session, quoted below. Re-fetch before
   implementing in case the source has been updated since.
-- **Scope: four EC-attributed formats, not two** — the user's original ask
-  ("Old School 93/94 and Middle School") plus "all EC variants" expands to
-  all four Eternal Central formats on that page, since 95 and Classic Magic
-  are also EC-attributed and share most of their structure with 93-94/
-  Middle School:
+- **Reframed scope (2026-07-07, mid-discussion):** this item started as
+  "add 4 hardcoded EC formats" and was deliberately widened to a more
+  general capability once the user raised it — **don't build the narrow
+  version.** The real ask has three layers, broadest first:
+  1. A **general custom/"design your own format" engine**: players
+     and/or instance operators can define a format (legal card pool,
+     restricted/banned lists, deck-size rules, sideboard policy, starting
+     life, mulligan variant, etc.) as *data*, without a phase.rs code
+     change or rebuild.
+  2. That data-driven format definition also needs an **independently
+     toggleable "legacy/alternate rules" flag set** — see below, this is
+     NOT the same axis as card-pool/banned-list restriction.
+  3. The four EC formats (plus, as a stretch goal, LotP's "Eternal Chaos"
+     variant) become the **first bundled presets** built on top of (1)
+     and (2), proving the general system works, rather than a parallel
+     hardcoded implementation that the custom-format engine would later
+     have to duplicate or reconcile with.
+  - This ordering matters: per CLAUDE.md's "build for the class, not the
+    card," if a general custom-format system is the real target, building
+    it first and expressing the four EC formats *through* it (as data) is
+    the aligned design — not the other way around. Don't let "just ship 4
+    formats fast" pull the implementation back to the narrow, hardcoded
+    version once work starts.
+- **Legacy/alternate rules — a separate, independently-toggleable axis
+  from deck legality (confirmed this session via the EC source data):**
+  Mana burn applies to **all four** EC formats (93-94, 95, Middle School,
+  *and* Classic Magic). "Damage Uses the Stack" and pre-M10 Wish
+  templating apply **only** to Middle School and Classic Magic — NOT
+  93-94 or 95. Because these don't travel together, they must be modeled
+  as independent flags (e.g. `LegacyRules { mana_burn: bool,
+  damage_uses_stack: bool, pre_m10_wish_templating: bool, ... }`) that the
+  core engine's rules logic checks generically wherever each applies —
+  never as a per-format hardcoded check (`if format == MiddleSchool`).
+  This flag set is itself part of what "design your own format" needs to
+  expose, since real old-format communities disagree on which legacy
+  rules to combine.
+  - **These two legacy rules are NOT the same size of engine change —
+    investigate both independently, don't assume parity:**
+    - **Mana burn** was removed from the modern Comprehensive Rules
+      entirely by the 2010 "M10" update (not present in current CR at
+      all) — re-adding it as an optional flag is likely a well-contained
+      addition IF the engine already tracks unspent mana when a pool
+      empties at a step/phase boundary (probably does, since pool-emptying
+      is itself required for any ruleset) — investigate that hook point
+      specifically as the likely small, tractable piece.
+    - **"Damage Uses the Stack"** is a deeper, pre-6th-edition combat
+      resolution difference (damage was itself a stacked, response-able
+      event rather than the current immediate-effect model) — likely
+      touches core combat-damage-resolution ordering, not just a
+      step-boundary check. Investigate whether the current engine has
+      *any* hook-point for this before assuming it's comparable in size
+      to mana burn. If it's genuinely large, ship deck-legality +
+      mana-burn support first, with damage-on-the-stack as an explicitly
+      separate, clearly-labeled follow-on — don't let it block everything
+      else.
+  - Neither of us knows yet how deep this goes in the current engine —
+    that uncertainty is exactly what the research phase needs to resolve,
+    not something to guess a size for now.
+- **Instance-configurability and the design-interface question — genuinely
+  open, don't assume an answer:** "instance customizable via configs" and
+  "design your own format" could mean either (or both, feeding the same
+  underlying schema): (a) a **player-facing UI** where someone builds a
+  format interactively in the client and it's saved/shareable, or (b) an
+  **operator-facing config file** a self-hosted phase-server instance
+  loads at startup/build time to enable house-rule formats for that
+  deployment only (the closest existing precedent for *that* half is
+  `GATED_SETS` in `crates/engine/src/database/set_gating.rs` — an
+  env-var-driven, generation-time config knob, though it's a narrow
+  pre-release-embargo tool, not a general format-definition mechanism).
+  Resolve which (or both) is wanted, and if both, confirm they share one
+  underlying data schema rather than becoming two divergent
+  implementations, before designing either.
+- **The four EC-attributed formats (content confirmed, architecture is
+  the open question above) — not two, "all EC variants" expands the
+  original "93/94 + Middle School" ask to all four on the source page:**
   1. **Old School 93-94** — Alpha, Beta, Unlimited, Arabian Nights,
      Antiquities, Revised, Legends, The Dark, Fallen Empires. Reprints
      allowed only with original frame/art. Restricted (1 copy): Ancestral
@@ -73,12 +143,13 @@ so there's a record of what's already been resolved.
      five Moxes, Recall, Regrowth, Sol Ring, Time Vault, Time Walk,
      Timetwister, Wheel of Fortune. Banned: Bronze Tablet, Contract from
      Below, Darkpact, Demonic Attorney, Jeweled Bird, Rebirth, Tempest
-     Efreet. Mana burn applies; "No Draws" rule (tied matches after 50
-     minutes settled by Chaos Orb flip, not a draw).
+     Efreet. Legacy rules: mana burn only. "No Draws" rule (tied matches
+     after 50 minutes settled by Chaos Orb flip, not a draw).
   2. **Old School 95** — 93-94's pool plus Fourth Edition, Ice Age,
      Chronicles, Renaissance, Homelands. Restricted list = 93-94's plus
      Demonic Consultation and Mana Crypt. Banned list = 93-94's plus
-     Amulet of Quoz and Timmerian Fiends. Same mana-burn/no-draws rules.
+     Amulet of Quoz and Timmerian Fiends. Legacy rules: mana burn only
+     (same as 93-94).
   3. **Middle School** — 1995-2003 (Fourth Edition through Scourge).
      Reprints allowed (Collector's Edition/International Collector's
      Edition, World Championship, artist proofs; even modern-bordered
@@ -88,139 +159,130 @@ so there's a record of what's already been resolved.
      Goblin Recruiter, Imperial Seal, Jeweled Bird, Mana Crypt, Mana
      Vault, Memory Jar, Mind's Desire, Mind Twist, Rebirth, Strip Mine,
      Tempest Efreet, Timmerian Fiends, Tolarian Academy, Vampiric Tutor,
-     Windfall, Yawgmoth's Bargain, Yawgmoth's Will). Mana burn applies.
-     **"Damage Uses the Stack"** and Wish cycle functions "as Originally
-     Designed, Pre-M10 Rules Change" — see the engine-rules flag below,
-     this is NOT just a deck-legality filter.
+     Windfall, Yawgmoth's Bargain, Yawgmoth's Will). Legacy rules: mana
+     burn AND damage-uses-the-stack AND pre-M10 Wish templating (all
+     three).
   4. **Classic Magic** — full 1993-2003 pool (Alpha through Scourge), no
      new-border reprints of any kind (proxy or not). Its own restricted
      list (37 cards, mostly a superset spanning both eras — Ancestral
      Recall, Black Lotus, Necropotence, Vampiric Tutor, Yawgmoth's
-     Bargain/Will, etc.) and banned list (11 cards). Mana burn, damage on
-     the stack, wish-cycle restoration, banlist updates twice yearly
-     (Jan 1 / Jul 1 — likely irrelevant for a single-player-controlled
-     fork, but document the real-world cadence in case it matters later).
+     Bargain/Will, etc.) and banned list (11 cards). Legacy rules: mana
+     burn AND damage-uses-the-stack AND wish-cycle restoration (same set
+     as Middle School). Banlist updates twice yearly in the real world
+     (Jan 1 / Jul 1) — likely irrelevant for a single-operator fork, but
+     worth noting if this ever needs periodic re-sync.
   - **Stretch goal, not core scope:** "Eternal Chaos" on the same page is
     a Lords-of-the-Pit-specific variant built on top of EC 93-94 (adds
     booster-pack tutoring during matches, a dynamically-built sideboard
     from opened packs instead of a pre-built one, and a "Gentleman's
     Agreement" pre-match ban option) — it's NOT itself an EC-defined
     format, it's LotP's own house rule layered on 93-94. Confirmed wanted
-    (2026-07-07), but explicitly lower priority than the four core EC
-    formats above — sequence it after those ship, since it depends on
-    93-94's card pool/restricted/banned lists already existing and adds a
-    genuinely new mechanic (in-match pack-opening + dynamic sideboard)
-    that isn't just a deck-legality variant.
-- **Architecture — the key open question, confirmed this session:**
+    (2026-07-07), but explicitly sequenced after the four core EC formats
+    (and the general custom-format engine they're built on) ship — it
+    depends on 93-94 already existing and adds a genuinely new mechanic
+    (in-match pack-opening + dynamic sideboard), not just a rules-flag
+    combination.
+- **Architecture context already confirmed this session (applies whether
+  the general custom-format engine turns out to be built on top of
+  `GameFormat` or alongside it):**
   - `GameFormat`/`FormatConfig`/`FormatMetadata` (`crates/engine/src/types/format.rs`)
-    is a real, well-established, self-documenting pattern — adding a
-    format is normally small (see `GameFormat::Premodern`, a close analog:
-    one enum variant, one `FormatConfig::premodern()` builder inheriting
-    from `standard()`, one `FormatMetadata` registry entry, one
-    `LegalityFormat` mapping). **There is real prior art for this exact
-    kind of task in this repo**: a full planning cycle already ran for
-    adding `GameFormat::Limited` — see `.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`,
+    is a real, well-established, self-documenting pattern for *built-in*
+    formats (see `GameFormat::Premodern`: one enum variant, one
+    `FormatConfig::premodern()` builder inheriting from `standard()`, one
+    `FormatMetadata` registry entry, one `LegalityFormat` mapping) — but
+    it's a closed, compile-time Rust enum, which is the right shape for a
+    fixed official-format list and the *wrong* shape for player/operator-
+    authored custom formats. The custom-format engine likely needs an
+    additive, data-driven layer alongside this (e.g. a
+    `GameFormat::Custom(CustomFormatId)` variant or an entirely separate
+    format-identity concept), not a wholesale rewrite of `GameFormat`
+    into stringly-typed data.
+  - **Real prior art for a new-format planning cycle in this exact repo**:
+    `GameFormat::Limited` — see `.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`,
     committed at `80404a98b` (`.planning/` is gitignored and was later
     stripped from tracking entirely — commit "Remove planning docs" — so
     it no longer exists in a fresh checkout; retrieve it via `git show
     80404a98b:.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`).
-    Use this as a concrete template for how a new-format planning doc has
-    actually been scoped in this repo before.
-  - **However**, `Premodern`'s (and every other existing format's)
-    per-card legality comes from an *externally-sourced* per-card
-    `legalities` field ingested into `CardLegalities`
-    (`crates/engine/src/database/legality.rs` + `card_db.rs`'s
-    `normalize_legalities(&entry.legalities)`) — this looks like it
-    mirrors Scryfall/MTGJSON's own bulk-data legality object keys
-    (`"standard"`, `"premodern"`, `"pioneer"`, etc.). **None of the four
-    EC formats above are expected to have that kind of external per-card
-    legality signal already populated in this project's card-data
-    pipeline** — they're niche community formats maintained by a
-    third-party rules body (Eternal Central), not tracked the same way
-    mainstream/Scryfall-recognized community formats like Premodern are.
-    Confirm this directly (check an actual card's raw ingested legality
-    data for any `"oldschool"`/`"middleschool"`/`"classic"` key) before
-    assuming either way — but if absent, as expected, the engine needs a
-    **new, locally-defined legality mechanism**: e.g. an explicit
-    legal-set-code list plus explicit restricted/banned name lists per
-    format, evaluated directly against each card's set code and name,
-    independent of the existing `CardLegalities` pipeline. Checked
-    `crates/engine/src/database/set_gating.rs` as a candidate for this
-    already existing — it does NOT fit; it's a pre-release embargo tool
-    (`GATED_SETS` env var, generation-time only), not a general
-    set-restriction mechanism.
-  - **Parameterize, don't proliferate** (per CLAUDE.md): these four
-    formats share a heavily overlapping, incrementally-expanding
-    structure (95 = 93-94's pool + 5 more sets + 2 more
-    restricted/banned; Middle School continues where 95 leaves off, no
-    restricted list; Classic Magic spans the whole 1993-2003 range with
-    its own combined lists). This strongly suggests ONE parameterized
-    shape (e.g. something like `EternalCentralRuleset { legal_sets:
-    &'static [&'static str], restricted: &'static [&'static str], banned:
-    &'static [&'static str], reprint_policy: ... }`) rather than four
-    independent hardcoded format implementations — design it that way
-    from the start rather than copy-pasting four near-identical blocks.
+  - `Premodern`'s (and every built-in format's) per-card legality comes
+    from an *externally-sourced* per-card `legalities` field ingested
+    into `CardLegalities` (`crates/engine/src/database/legality.rs` +
+    `card_db.rs`'s `normalize_legalities(&entry.legalities)`) — this
+    mirrors Scryfall/MTGJSON's own bulk-data legality keys (`"standard"`,
+    `"premodern"`, `"pioneer"`, etc.). **None of the four EC formats are
+    expected to have that external per-card legality signal already
+    populated** — confirm directly (check an actual card's raw ingested
+    legality data for an `"oldschool"`/`"middleschool"`/`"classic"` key)
+    rather than assuming, but if absent as expected, this is exactly the
+    kind of thing the general custom-format engine needs to support
+    natively: a locally-defined legal-set-code + restricted/banned-name
+    list, evaluated directly against each card's set code and name,
+    independent of the `CardLegalities` pipeline. `set_gating.rs` was
+    checked as a candidate for this and does NOT fit (pre-release
+    embargo tool only).
   - **`DeckCopyLimit::UpTo(n)`** (already exists in `format.rs`, currently
     used for per-card overrides like Relentless Rats/Nazgûl/Commander
     singleton) may directly be the right building block for "restricted
-    to 1 copy" — check whether it can be reused format-wide for the
-    restricted lists above (93-94, 95, Classic Magic) rather than
+    to 1 copy" in a custom format's restricted list — check reuse before
     inventing a second, parallel "restricted list" concept.
-  - **"Damage Uses the Stack" (Middle School, Classic Magic) is a real
-    pre-6th-edition (pre-"M10 rules change") core-rules difference, not a
-    deck-legality filter.** This is potentially a much bigger engine
-    undertaking than card-pool/banned-list filtering — investigate
-    whether the current engine's combat-damage resolution has any
-    hook-point for this at all before scoping it as "small." If it turns
-    out to require deep changes to how damage is dealt/ordered, treat
-    that as its own sub-project and consider shipping the deck-legality
-    half of these formats first, with old-damage-rules as a clearly
-    labeled follow-on rather than a blocking prerequisite.
+  - **Parameterize, don't proliferate** (per CLAUDE.md) applies twice
+    here: once at the "custom format schema vs. four separate EC formats"
+    level (the four EC presets should be four instances of one schema,
+    not four hardcoded blocks), and again within any built-in-format
+    fallback path if one still exists after the custom engine is built.
   - **Design/research output belongs in `.planning/phases/<NN>-<slug>/`**
     (CONTEXT/RESEARCH/PLAN/SUMMARY/VERIFICATION docs per CLAUDE.md's own
-    "Planning" section) — this directory is gitignored and stays local,
-    decoupled from any PR, matching how the `GameFormat::Limited` cycle
-    above was actually run. Research/design can happen well before
-    implementation and by a different session/agent; don't conflate the
-    two phases or assume they need to happen back-to-back.
+    "Planning" section) — gitignored, stays local, decoupled from any PR,
+    matching how the `GameFormat::Limited` cycle above was actually run.
+    Research/design can happen well before implementation and by a
+    different session/agent; don't conflate the two phases.
 - **Prompt:**
   > Research and produce a plan (don't implement yet, write it to
-  > `.planning/phases/<NN>-eternal-central-formats/`) for adding four
-  > Eternal Central retro constructed formats to phase.rs: Old School
-  > 93-94, Old School 95, Middle School, and Classic Magic. Re-fetch
-  > https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md
-  > to confirm the exact card pools, restricted lists, and banned lists
-  > haven't changed since 2026-07-07 (quoted in this backlog item as of
-  > that date). First read `crates/engine/src/types/format.rs` in full
-  > (trace `GameFormat::Premodern` end-to-end as the closest existing
-  > analog) and `.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`
+  > `.planning/phases/<NN>-custom-format-engine/`) for a general,
+  > data-driven "design your own format" engine in phase.rs, with the
+  > four Eternal Central retro formats (Old School 93-94, Old School 95,
+  > Middle School, Classic Magic) as the first bundled presets exercising
+  > it. Do NOT scope this narrowly as "hardcode 4 GameFormat variants" —
+  > the actual ask is the general engine first, formats as data on top of
+  > it. Re-fetch https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md
+  > to confirm the exact card pools/restricted/banned lists quoted in this
+  > backlog item (as of 2026-07-07) haven't changed. First read
+  > `crates/engine/src/types/format.rs` in full (trace `GameFormat::Premodern`
+  > end-to-end) and `.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`
   > (retrieve via `git show 80404a98b:.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`
-  > since `.planning/` is gitignored) as the concrete prior-art template
-  > for how a new-format planning cycle has actually been scoped in this
-  > repo before. Confirm directly (don't assume) whether the card-data
-  > pipeline's existing `CardLegalities`/`LegalityFormat` mechanism
-  > (`crates/engine/src/database/legality.rs`) has any per-card signal for
-  > these formats already; if not (expected, since these are
-  > Eternal-Central-maintained community formats not tracked by
-  > Scryfall/MTGJSON's own legality keys the way Premodern is), design a
-  > new, locally-defined legal-set-code + restricted/banned-name-list
-  > mechanism instead of extending the external-legality pipeline.
-  > Because these four formats share a heavily overlapping,
-  > incrementally-expanding structure, design ONE parameterized ruleset
-  > shape per CLAUDE.md's "parameterize, don't proliferate" principle
-  > rather than four independent implementations — check whether the
-  > existing `DeckCopyLimit::UpTo(n)` mechanism can serve as the
-  > restricted-list building block. Separately and explicitly investigate
-  > "Damage Uses the Stack" (Middle School, Classic Magic) — this is a
-  > real pre-6th-edition core-rules difference, not deck legality; report
-  > whether the current engine has any hook for pre-M10 damage rules at
-  > all, and if it's a large undertaking, propose shipping deck-legality
-  > for all four formats first with old-damage-rules scoped as a clearly
-  > separate follow-on. The LotP-specific "Eternal Chaos" variant
-  > (booster-pack tutoring built on 93-94, not itself an EC-defined
-  > format) is a confirmed stretch goal — sequence it after the four core
-  > EC formats ship, not alongside them; note it in the plan but don't
-  > block on it.
+  > since `.planning/` is gitignored) as prior art for how a new-format
+  > planning cycle has actually been scoped in this repo. Design: (1) a
+  > data-driven custom-format definition schema (legal-set list,
+  > restricted/banned name lists, deck-size/sideboard rules, and an
+  > independently-toggleable `LegacyRules` flag set covering at minimum
+  > mana burn and damage-uses-the-stack — confirmed NOT to travel together,
+  > since 93-94/95 use only mana burn while Middle School/Classic Magic
+  > use both, so they must be separate flags, not one "old rules" bool);
+  > (2) how that schema relates to the existing closed `GameFormat` enum
+  > (additive `Custom` variant vs. parallel concept — the existing enum
+  > should stay closed/typed for official formats, this needs to be a
+  > separate additive layer, not a rewrite into stringly-typed data); (3)
+  > resolve whether "design your own format" means a player-facing UI, an
+  > operator-facing per-instance config file (nearest existing precedent:
+  > `GATED_SETS` in `crates/engine/src/database/set_gating.rs`, though it
+  > doesn't fit as a mechanism, only as a rough shape of "env/config-driven
+  > deployment customization"), or both sharing one schema — don't assume
+  > an answer. Confirm directly whether the card-data pipeline's
+  > `CardLegalities`/`LegalityFormat` mechanism already carries any signal
+  > for these EC formats (expected: no) before designing the new
+  > locally-defined legal-set/banned-list mechanism the custom-format
+  > engine will need regardless. Separately and independently investigate
+  > mana burn (likely small — check whether the engine already tracks
+  > unspent mana at pool-emptying boundaries) versus "damage uses the
+  > stack" (likely much larger — a pre-6th-edition combat-resolution
+  > difference, not a deck-legality filter; report whether the engine has
+  > any hook for this at all) — do not assume they're the same size of
+  > change. If damage-on-the-stack is large, propose shipping
+  > deck-legality + mana-burn support for all four EC formats first, with
+  > damage-on-the-stack as a clearly separate, non-blocking follow-on. The
+  > LotP-specific "Eternal Chaos" variant (booster-pack tutoring built on
+  > 93-94, not itself an EC-defined format) is a confirmed stretch goal —
+  > sequence it after the core engine and four EC presets ship; note it in
+  > the plan but don't block on it.
 
 ### [research] Audit the AWS host before hosting phase.rs there
 

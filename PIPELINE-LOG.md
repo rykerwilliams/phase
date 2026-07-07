@@ -62,6 +62,22 @@ not as a scientific benchmark.
 7. **Always use Oracle text verified against Scryfall**, never memory or
    the issue's paraphrase — feed it to every planning agent explicitly
    labeled as verified.
+8. **"Verified against Scryfall" isn't enough by itself — the exact
+   formatting (embedded newlines between sentences) matters and must be
+   preserved.** Pact of Negation (#1058) round 1's entire root-cause
+   diagnosis was invalidated because the scratch repro used a
+   paraphrased single-line version of the Oracle text instead of the
+   verbatim two-line text (`"Counter target spell.\nAt the beginning of
+   your next upkeep..."`). The parser dispatches per-line
+   (`oracle_text.split('\n')`), so joining two sentences onto one line
+   silently routes to a *different* parser code path than the real card
+   ever hits — reproducing a bug that doesn't exist on `main` while
+   missing whatever the real defect (if any) actually is. Any scratch
+   repro or plan must call the real parse entry point
+   (`parse_oracle_text`) on the literal multi-line string, never a
+   manually reflowed/joined paraphrase, and should ideally paste the
+   verbatim value with its newlines shown explicitly to make this
+   checkable at review time.
 
 ---
 
@@ -101,20 +117,34 @@ not as a scientific benchmark.
 
 ## #1058 — Pact of Negation
 
-- **Status:** planning complete, in review.
-- **Planning:** 1 round so far, ~64.6m/258 tool calls — notably deeper
-  than Ad Nauseam's planning (65 tools) because the agent built and ran
-  an actual scratch reproduction test with a printed AST dump to pin
-  down the exact wrong-attachment point, rather than reasoning from a
-  read-through alone. This is the same rigor as lesson 1, just costed
-  more tool calls because the bug required constructing a repro from
-  scratch (no pre-existing test came close) rather than running an
-  existing one.
-- **Finding:** issue's stated symptom real, stated cause wrong (see
-  standing lesson 1) — it's a parser AST-wiring bug (the "If you don't,
-  lose the game" rider attaches to the `CreateDelayedTrigger` wrapper
-  instead of nesting inside the delayed effect), not AI-specific.
-  Precedent under-scoped fix identified (lesson 4): Ashling's `unless_pay`
-  hoist (#4369) solved the identical architectural problem for a
-  different clause shape and was never generalized to this one.
-- *(entry will be updated as review/implementation proceed)*
+- **Status:** round 1 plan BLOCKED by review — root cause was diagnosed
+  from a corrupted repro, redoing planning from scratch.
+- **Planning round 1:** ~64.6m/258 tool calls — notably deeper than Ad
+  Nauseam's planning (65 tools) because the agent built and ran an
+  actual scratch reproduction test with a printed AST dump. Diagnosed a
+  parser AST-wiring bug (the "If you don't, lose the game" rider
+  attaching to `CreateDelayedTrigger`'s wrapper instead of nesting
+  inside the delayed effect) and identified an under-scoped precedent
+  fix (Ashling's `unless_pay` hoist, #4369).
+- **Plan review round 1:** ~27.2m/50 tools — **BLOCKED, not just
+  gapped.** The reviewer independently ran `parse_oracle_text` on the
+  literal verbatim Scryfall text (`"Counter target spell.\nAt the
+  beginning of..."`, real embedded newline) and got a *correctly nested*
+  AST — the exact opposite of round 1's finding. Root cause: round 1's
+  scratch repro used a paraphrased single-line join of the two sentences
+  instead of the verbatim multi-line text, which routes to a different
+  parser dispatch branch (`oracle_text.split('\n')`-based) than the real
+  card ever hits. The reviewer reproduced round 1's claimed bug *only*
+  when deliberately re-joining the lines — confirming the diagnosis, not
+  just asserting it. See standing lesson 8. Also caught a misapplied CR
+  citation (603.12, reflexive triggers) that doesn't fit this card's
+  "if you don't" cost-gate shape (that's CR 118.12 territory).
+  All open items the round-1 plan deferred to "the implementer" were
+  reclassified as blocking, since they were downstream of the same false
+  premise.
+- **This is the highest-value catch of the night**: round 1's fix would
+  have been implemented, tested against its own (wrong) mental model,
+  and likely shipped a no-op or actively harmful change to a code path
+  the real card never touches, while leaving the actual reported
+  behavior (if it's even still broken — not yet re-established) unfixed.
+- *(entry will be updated as the redo proceeds)*

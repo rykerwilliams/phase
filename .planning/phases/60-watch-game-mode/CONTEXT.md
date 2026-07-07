@@ -113,5 +113,25 @@ Because the baseline feature works, the meaningful questions are about
 - **Spectator chat / emotes.** Players have emotes; spectators currently do not
   send anything. Out of scope unless explicitly requested.
 
-- **Rewatch / VOD / replay of finished games.** A replay feature exists
-  separately (`#2247`); this phase is about *live* spectating only.
+- **Rewatch / VOD / replay of finished games — correction to an earlier draft
+  of this doc.** An earlier pass cited PR `#2247` as "a replay feature exists
+  separately." Verified directly (`gh pr view 2247`) and that's wrong: despite
+  a stale title ("feat(client): replays, content i18n, spectator dashboard,
+  2HG UI"), the PR's actual merged body is a pure mechanical refactor of
+  `CardChoiceModal.tsx` with **no replay/spectator/i18n content** — its own
+  description says those features were explicitly split out per review
+  feedback ("keep this as a small, atomic PR... not bundled with replays,
+  i18n, spectator"). So replay is **not** confirmed shipped anywhere. The
+  real, still-open, unclaimed request is **phase-rs/phase#4613** ("Add
+  action-based game replay system"), created 2026-06-29: export a
+  deterministic `(header, ordered actions)` replay log from a local/AI game,
+  reconstruct/seek/scrub it later in a read-only Replay Viewer reusing the
+  existing spectate-mode `GameBoard` rendering path. This is a genuinely
+  different problem from this phase's live spectating (post-hoc file-based
+  playback of a finished/local game vs. live-viewing an in-progress
+  multiplayer one) — not a duplicate, not blocked by or blocking this phase —
+  but it's worth being aware both land on the same "read-only board UI" seam
+  (`gameMode: "spectate"` disabling action dispatch), so a future contributor
+  building #4613 will likely reuse the same visibility/redaction thinking
+  this phase's RESEARCH.md documents for live spectators. Still out of scope
+  here; flagged for awareness, not action.

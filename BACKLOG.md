@@ -1034,3 +1034,45 @@ so there's a record of what's already been resolved.
   interactive prompt, not a fixed/random pick.
 - **Action taken:** posted evidence as a comment (no permission to close
   directly). No PR needed.
+
+### [bug-fix] ~~Cards counting lands (Archaeomancer's Map, Land Tax, Knight of the White Orchid, Claim Jumper, Weathered Wayfarer)~~ — already fixed, stale duplicate (GitHub #1127)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1127](https://github.com/phase-rs/phase/issues/1127),
+  surfaced via a fresh-issue sweep. Land Tax is old-border-era (Legends,
+  1994); the rest are Vintage/Legacy legal.
+- **Verified Oracle text** (Scryfall, all 5 cards): the shared clause is
+  "if an opponent controls more lands than you" (Land Tax, Knight of the
+  White Orchid, Claim Jumper — twice, for its repeat-gate too —
+  Weathered Wayfarer's activation restriction) or "if that player
+  controls more lands than you" (Archaeomancer's Map, event-scoped to
+  the specific opponent whose land just entered).
+- **Investigated 2026-07-07.** #1127 (filed 2026-05-26) is a stale,
+  never-deduped duplicate of three separate, more specific issues, all
+  since fixed and closed:
+  1. **#2908** ("Weathered Wayfarer: activation restriction dropped,
+     parser emits `condition:null`") — fixed by `e93dccdb3` (#3002,
+     2026-06-11).
+  2. **#1304** ("Keeper of the Accord not working — 'that player controls
+     more creatures than you'") — fixed by `92feb876a` (#1432,
+     2026-05-29), which wired the `ScopedPlayer`/trigger-condition path
+     Archaeomancer's Map also needs.
+  3. **Claim Jumper's "repeat this process once" clause** — fixed by
+     `405151475` (#4030, 2026-06-21).
+  All three commits are confirmed ancestors of current `main` (`git
+  merge-base --is-ancestor`). Live-tested 7 regression tests covering
+  all 5 cards' actual mechanisms — all pass:
+  `test_opponent_controls_more_lands_than_you`,
+  `claim_jumper_parses_repeat_once_while_opponent_lands`,
+  `parses_activate_only_if_opponent_controls_more_lands_than_you`,
+  `keeper_of_the_accord_creature_intervening_if_true_when_opponent_ahead`/
+  `_false_when_tied` (the `ScopedPlayer` mechanism Archaeomancer's Map
+  shares), plus 2 supporting parser tests.
+- **Residual gap (not blocking, noted for future work):** no test
+  currently pins `TriggerDefinition.condition` end-to-end for the
+  *leading* "if an opponent/that player controls more X than you"
+  ETB/phase-trigger form specifically (only the embedded repeat-gate and
+  the activation-restriction form are directly covered) — a worthwhile
+  test-coverage-only follow-up, not a functional gap.
+- **Action taken:** posted evidence as a comment linking the 3 actual
+  fixing PRs (no permission to close directly). No PR needed.

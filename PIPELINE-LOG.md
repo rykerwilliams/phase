@@ -78,6 +78,21 @@ not as a scientific benchmark.
    manually reflowed/joined paraphrase, and should ideally paste the
    verbatim value with its newlines shown explicitly to make this
    checkable at review time.
+9. **A genuinely generic process/doc fix marked "local-only, not for
+   upstream PR" silently stops applying to any real work.** The
+   "Verify the card, not just the rule" CLAUDE.md principle and its
+   matching `engine-planner` Step 0 hard gate — which would have caught
+   lesson 8 directly — were committed to this fork's `main` only
+   (`4f5c2e0c7`, by explicit request at the time) alongside genuinely
+   fork-specific items like `BACKLOG.md`. But every fix worktree is cut
+   fresh from `origin/main`, so that rule never reached any actual fix
+   session, including the one that needed it hours later. Lesson: before
+   marking a `CLAUDE.md`/skill/doc change "local-only," check whether it
+   is actually fork-specific (personal infra, credentials, branding) or
+   a generic process improvement — the latter belongs in its own clean
+   upstream PR immediately, not bundled with divergent fork state, or it
+   will quietly never take effect. Fixed via
+   [phase-rs/phase#5342](https://github.com/phase-rs/phase/pull/5342).
 
 ---
 
@@ -147,4 +162,20 @@ not as a scientific benchmark.
   and likely shipped a no-op or actively harmful change to a code path
   the real card never touches, while leaving the actual reported
   behavior (if it's even still broken — not yet re-established) unfixed.
-- *(entry will be updated as the redo proceeds)*
+- **Planning round 2 (redo with verbatim text):** ~58.8m/165 tool calls.
+  Confirmed the reviewer's finding exactly — the real card's AST is
+  already correctly shaped — then pivoted to a full runtime
+  `GameRunner` simulation (unpaid → loss, paid → no loss, both
+  confirmed correct) and found a pre-existing regression test
+  (`issue_3871_summoners_pact.rs`) covering the identical rider shape.
+  No AI-specific gap found. **Outcome: no bug, no code change** — same
+  shape of result as Underworld Breach. Commented on
+  [phase-rs/phase#1058](https://github.com/phase-rs/phase/issues/1058)
+  with evidence.
+- **Bonus finding:** the round-1 mistake led directly to discovering
+  standing lesson 9 (a real process gap upstream of this specific bug),
+  fixed via [phase-rs/phase#5342](https://github.com/phase-rs/phase/pull/5342).
+- **Total for this item:** 2 planning rounds + 1 plan review round,
+  ~2.6h combined agent time, zero lines of engine code changed — the
+  value was entirely in *not* shipping a wrong fix, plus fixing the
+  meta-process gap that caused the wrong turn in the first place.

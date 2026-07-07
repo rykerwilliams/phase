@@ -875,6 +875,68 @@ so there's a record of what's already been resolved.
   > before writing code, since this touches several existing preference
   > systems and a wrong seam here is expensive to unwind later.
 
+### [feature] Add a Premodern metagame decks feed
+
+- **Status:** open
+- **Source:** 2026-07-07 request
+- **Context (verified against the repo, not assumed):** phase.rs already has
+  a per-format metagame-decks feed system, distinct from the Commander-only
+  "precon" system (`useDecks.ts`, `PreconDeckModal.tsx`) — don't confuse the
+  two. The relevant one is `client/src/data/feedRegistry.ts:12-74`, which
+  lists a bundled feed JSON per format (`mtggoldfish-standard.json`,
+  `-modern`, `-pioneer`, `-commander`, `-legacy`, `-vintage`, `-pauper`) at
+  `client/public/feeds/*.json`, in the shape `{id, name, description, icon,
+  format, version, updated, source, decks: [{name, author, colors, tags,
+  main:[{count,name}], sideboard, commander?}]}`. **No
+  `mtggoldfish-premodern.json` exists yet** — that's the gap. `Premodern` is
+  already a fully supported engine format
+  (`crates/engine/src/types/format.rs:42` `GameFormat::Premodern`,
+  `client/src/data/formatRegistry.ts:76-84`), so this is purely a
+  missing-feed gap, not a missing-format gap.
+  - Feed generation already has an external-source pipeline to extend:
+    `crates/feed-scraper/src/scrape.rs` scrapes
+    `https://www.mtggoldfish.com/metagame/{format}` (URL built at
+    `scrape.rs:16`) via a `--format` CLI arg (`main.rs:19-21`, comma-separated
+    list), writing feed JSON into `client/public/feeds/`. MTGGoldfish does
+    have a `/metagame/premodern` page, so `--format premodern` should work
+    with no scraper changes — just needs to be added to the invocation.
+    `.github/workflows/refresh-feeds.yml:34` (daily cron) currently only
+    passes `--format standard,modern,pioneer,commander`; add `premodern` to
+    that list so it refreshes automatically going forward (existing
+    legacy/vintage/pauper feeds exist but appear to have been generated
+    manually/separately, not via the cron — check whether they should also
+    be added to the cron list while touching this, or leave that as a
+    separate decision).
+  - Minor: `config_format_tag()` in `scrape.rs:283-302` has a hardcoded
+    format-name list used only for a title-matching fallback tag; it doesn't
+    include `"premodern"` today. Not blocking (falls back to a generic
+    `"metagame"` tag, cosmetic only) but worth adding while in this file.
+  - **tcdecks.net has no existing precedent anywhere in this repo** — if
+    MTGGoldfish's `/metagame/premodern` page turns out to be thin/stale
+    (Premodern has a much smaller competitive scene than the formats
+    `feed-scraper` currently targets), tcdecks.net would be a second,
+    net-new source requiring its own scraper — confirm MTGGoldfish coverage
+    is adequate first before building a second source for one format.
+- **Prompt:**
+  > Add a Premodern feed to phase.rs's metagame-decks system (not the
+  > Commander-only precon system — those are separate; this is
+  > `client/src/data/feedRegistry.ts` + `client/public/feeds/*.json`).
+  > `Premodern` is already a supported engine format
+  > (`crates/engine/src/types/format.rs`); the gap is purely the missing
+  > `mtggoldfish-premodern.json` feed. Extend `crates/feed-scraper` (already
+  > scrapes `mtggoldfish.com/metagame/{format}`, see `scrape.rs`) with
+  > `--format premodern` and add it to the `.github/workflows/refresh-feeds.yml`
+  > cron's `--format` list so it refreshes automatically. Check MTGGoldfish's
+  > actual `/metagame/premodern` page first to confirm it has real deck data
+  > worth scraping (Premodern's competitive scene is much smaller than
+  > Standard/Modern/Pioneer) — only reach for tcdecks.net as a second source
+  > if MTGGoldfish's Premodern coverage turns out inadequate, since
+  > tcdecks.net has zero existing scraper precedent in this repo and would be
+  > net-new work. Register the new feed in `feedRegistry.ts` following the
+  > existing per-format entries exactly. Also add `"premodern"` to the
+  > format-name list in `config_format_tag()` (`scrape.rs`) for a correct
+  > fallback tag.
+
 ---
 
 ## Done

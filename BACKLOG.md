@@ -541,110 +541,47 @@ so there's a record of what's already been resolved.
   > shared delayed-trigger + "lose the game if unpaid" primitive rather
   > than a one-off check. Use `/add-trigger` for the delayed-trigger wiring.
 
-### [bug-fix] Cityscape Leveler's Powerstone token is delayed and goes to the wrong controller (GitHub #1079)
+### [bug-fix] Relic of Progenitus's first ability doesn't respect the targeted player (GitHub #1077)
 
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1079](https://github.com/phase-rs/phase/issues/1079);
-  sideboard/maindeck payoff in Vintage Karn Shops — no open PR.
-- **Verified Oracle text:** "When you cast this spell and whenever this
-  creature attacks, destroy up to one target nonland permanent. Its
-  controller creates a tapped Powerstone token." Trample, Unearth {8}.
-  ({8})
-- **Reported bug:** the Powerstone token isn't created immediately when
-  the ability resolves (sometimes appears only after a later
-  trigger/cast), and it's always created under the Leveler's controller
-  instead of the destroyed permanent's controller.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Cityscape Leveler (GitHub phase-rs/phase#1079): the Powerstone
-  > token from "Its controller creates a tapped Powerstone token" must be
-  > created as part of the same resolution as the destroy effect, under
-  > the *destroyed permanent's controller* — not the Leveler's controller,
-  > and not deferred to a later trigger. Verify Oracle text against
-  > Scryfall first. Trace how other "destroy target permanent, its
-  > controller creates X" effects resolve controller references (this is
-  > a general `ControllerRef` composition pattern per CLAUDE.md, not
-  > Leveler-specific) before writing new resolution logic.
-
-### [bug-fix] Expressive Iteration sends cards to the wrong zones (GitHub #1271)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1271](https://github.com/phase-rs/phase/issues/1271);
-  played in Vintage Izzet fast-mana shells — no open PR.
-- **Verified Oracle text:** "Look at the top three cards of your library.
-  Put one of them into your hand, put one of them on the bottom of your
-  library, and exile one of them. You may play the exiled card this
-  turn." ({U}{R})
-- **Reported bug:** after choosing the hand card, the engine sends the
-  chosen exile-card to the graveyard (unplayable) and sends the real
-  bottom-of-library card to exile instead — the zone assignments for the
-  other two cards are swapped/wrong.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Expressive Iteration (GitHub phase-rs/phase#1271): of the two
-  > non-hand cards from "look at the top three," one must go to the
-  > bottom of the library and the other to exile (playable this turn) —
-  > currently the exile-destined card is going to the graveyard and the
-  > bottom-library card is going to exile instead. Verify Oracle text
-  > against Scryfall first. This is the same "look at N, distribute to
-  > different zones" shape as other impulse-draw-plus-card-advantage
-  > effects — trace how zone assignment is wired for the modal choice
-  > before fixing, since a swapped zone-target bug like this may also
-  > affect other multi-destination reveal effects sharing the same
-  > resolver path.
-
-### [bug-fix] Relic of Progenitus targeting and second mode are both broken (GitHub #1077)
-
-- **Status:** open
+- **Status:** open — narrowed from the original two-part report
 - **Source:** GitHub issue [phase-rs/phase#1077](https://github.com/phase-rs/phase/issues/1077);
   standard Vintage sideboard graveyard hate against Dredge (a current
   top-3 Vintage archetype) — no open PR.
 - **Verified Oracle text:** "{T}: Target player exiles a card from their
   graveyard. {1}, Exile this artifact: Exile all graveyards. Draw a
   card." ({1})
-- **Reported bug:** activating the first ability prompts for a target
-  player but then shows the *activator's own* graveyard regardless of who
-  was targeted, plus asks for a card selection even though the ability
-  itself doesn't target a card. The second ability (exile all graveyards
-  + draw) doesn't trigger/work at all — only the first ability seems to
-  fire.
+- **Investigated 2026-07-07:** traced against current `main` before
+  implementing. The *second* ability ("exile all graveyards, draw a
+  card") uses only well-tested primitives (exile-self cost,
+  `ChangeZoneAll`, `Draw`) and multi-activated-ability parsing is
+  foundational engine-wide — no evidence this is actually broken as the
+  original report claimed. Narrowing this item to the first ability only.
+- **Reported bug (first ability, still real):** `inject_subject_target`
+  (`oracle_effect/mod.rs`) rewrites the subject for `Discard`, `Draw`,
+  `Scry`, `Token`, `ChangeZoneAll`, `Shuffle`, etc., but **not**
+  `Effect::ChangeZone` — the single-card exile this ability needs. The
+  generic exile fallback (`oracle_effect/imperative.rs`) only has a
+  hardcoded `attach_controller_if_absent(ControllerRef::You)` arm for
+  "...from your hand"; there's no possessive-pronoun-to-target-player
+  binding for "...from their graveyard." This matches the reported
+  symptom (shows activator's own graveyard instead of the targeted
+  player's).
 - **Before implementing:** re-confirm still reproduces on current `main`.
 - **Prompt:**
-  > Fix Relic of Progenitus (GitHub phase-rs/phase#1077): (1) the first
-  > ability's target player isn't respected — it shows the activator's
-  > own graveyard instead of the targeted player's, and the exiled card
-  > should be chosen by the *targeted player*, not the activator; (2) the
-  > second ability (sacrifice-cost "exile all graveyards, draw a card")
-  > isn't available/doesn't resolve at all — this card has two
-  > independent activated abilities, not one. Verify Oracle text against
-  > Scryfall first. Trace how other two-activated-ability artifacts expose
-  > both abilities as separate choices before fixing.
-
-### [bug-fix] Endurance's ETB fizzles if killed in response (GitHub #1059)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1059](https://github.com/phase-rs/phase/issues/1059);
-  free pitch-elemental graveyard hate/blocker played across Legacy/Vintage
-  — no open PR.
-- **Verified Oracle text:** "Flash, Reach. When this creature enters, up
-  to one target player puts all the cards from their graveyard on the
-  bottom of their library in a random order. Evoke — Exile a green card
-  from your hand." ({1}{G}{G})
-- **Reported bug:** if Endurance is killed in response to its own ETB
-  trigger, the trigger fizzles instead of resolving.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Endurance (GitHub phase-rs/phase#1059): its ETB trigger ("up to
-  > one target player puts all cards from their graveyard on the bottom
-  > of their library") must still resolve even if Endurance is removed in
-  > response to the trigger — per CR 603.3d/603.6b, a triggered ability
-  > exists independently on the stack once it triggers and doesn't fizzle
-  > just because its source left the battlefield (verify the exact CR
-  > numbers against `docs/MagicCompRules.txt` before citing). This is a
-  > general "leaves-battlefield-after-trigger" correctness class, not
-  > Endurance-specific — check whether other ETB triggers share the same
-  > bug via whatever resolves triggered abilities independent of source
-  > continued existence.
+  > Fix Relic of Progenitus's first ability (GitHub phase-rs/phase#1077):
+  > "Target player exiles a card from their graveyard" must bind the
+  > exile's subject/controller to the *targeted player*, not the
+  > activator. Verify Oracle text against Scryfall first. `ChangeZone`
+  > is missing from `inject_subject_target`'s handled-effect list
+  > (`oracle_effect/mod.rs`) alongside `Discard`/`Draw`/`Scry`/`Token`/
+  > `ChangeZoneAll`/`Shuffle` — this is a possessive-pronoun-to-target
+  > binding gap in a shared building block, not a Relic-specific fix, so
+  > check whether other "target player discards/exiles/puts a card from
+  > their [zone]" effects share the same gap before scoping the fix to
+  > just `ChangeZone`. Do NOT touch the second ability ("exile all
+  > graveyards, draw a card") — investigation confirmed it already works
+  > correctly; the original issue's claim about it not working appears to
+  > be false.
 
 ### [bug-fix] Violent Urge grants delirium bonus to all creatures, not just the target (GitHub #1272)
 
@@ -672,30 +609,6 @@ so there's a record of what's already been resolved.
   > conditional-bonus cards with an identical "target creature ... ;
   > condition — that creature also gains Y" shape before scoping the fix
   > to just this card.
-
-### [bug-fix] Mother of Runes doesn't let you choose the protection color (GitHub #624)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#624](https://github.com/phase-rs/phase/issues/624);
-  Middle-School/Premodern-era (Urza's Legacy) white-aggro staple, still a
-  played 1-drop across Legacy/Premodern/Canadian-Highlander today — no
-  open PR.
-- **Verified Oracle text:** "{T}: Target creature you control gains
-  protection from the color of your choice until end of turn." ({W})
-- **Reported bug:** the granted protection isn't tied to an actual player
-  choice — engine behaves as if it grants protection from a fixed/random
-  color rather than prompting the controller to pick one.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Mother of Runes (GitHub phase-rs/phase#624): "protection from the
-  > color of your choice" requires a color-choice prompt to the ability's
-  > controller at activation, then grants protection from that specific
-  > chosen color — not a fixed or random color. Verify Oracle text against
-  > Scryfall first. This is a general "choose a color" cost/effect
-  > parameter shared by many cards (e.g. other protection-granting
-  > effects, color-choice CDAs) — trace how color choice is modeled
-  > elsewhere in the engine before adding a new mechanism. Use
-  > `/add-interactive-effect` for the choice round-trip.
 
 ### [bug-fix] Solitary Confinement prevents damage to all players instead of just its controller (GitHub #1062)
 
@@ -1009,3 +922,78 @@ so there's a record of what's already been resolved.
   GitHub permissions on `phase-rs/phase`); posted evidence as a comment
   instead ([issuecomment-4908412649](https://github.com/phase-rs/phase/issues/1080#issuecomment-4908412649))
   asking a maintainer to confirm and close. No PR needed for this item.
+
+### [bug-fix] ~~Cityscape Leveler's Powerstone token is delayed and goes to the wrong controller~~ — already fixed (GitHub #1079)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1079](https://github.com/phase-rs/phase/issues/1079);
+  sideboard/maindeck payoff in Vintage Karn Shops.
+- **Investigated 2026-07-07** by tracing current `main` before touching
+  anything.
+- **Findings:** the generic "[verb] target permanent. Its controller
+  creates a token" shape is a tested, general pattern, not per-card
+  logic. `oracle_effect/tests.rs`
+  (`effect_its_controller_creates_tokens_sets_parent_target_controller_owner`)
+  confirms "Its controller creates two Map tokens" lowers
+  `owner: TargetFilter::ParentTargetController` — the destroyed/exiled
+  object's controller, not the source's. Immediacy is proven by a
+  full-pipeline test on a structurally identical real card, Fractured
+  Identity (`oracle_pipeline_snapshot_tests.rs`,
+  `fractured_identity_each_player_other_than_controller_copies_exiled_permanent`):
+  its second sentence becomes a `sub_ability`
+  (`AbilityDefinition::sub_ability`, `types/ability.rs`) — a
+  same-resolution continuation, never a new/delayed trigger. No
+  card-specific code exists for Cityscape Leveler; it rides this
+  already-correct general path.
+- **Action taken:** posted evidence as a comment (no permission to close
+  directly). No PR needed.
+
+### [bug-fix] ~~Expressive Iteration sends cards to the wrong zones~~ — already fixed (GitHub #1271)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1271](https://github.com/phase-rs/phase/issues/1271);
+  played in Vintage Izzet fast-mana shells.
+- **Investigated 2026-07-07.** `game/effects/mod.rs` contains a dedicated
+  regression test, `expressive_iteration_dig_chain_reaches_library_bottom_and_exile`
+  (citing issue #1162), using the exact card text, that drives the real
+  parser + real resolver and asserts: card kept → Hand, card chosen for
+  bottom → Library back, and the third, unchosen card → Exile with
+  `CastingPermission::PlayFromExile` — precisely the correct (non-swapped)
+  zone assignment. Source-level evidence directly contradicts the
+  reported swap; a full `cargo test -p engine` run could not be completed
+  in-session to get a live green confirmation, but the assertions are
+  unambiguous.
+- **Action taken:** posted evidence as a comment (no permission to close
+  directly). No PR needed.
+
+### [bug-fix] ~~Endurance's ETB fizzles if killed in response~~ — already fixed (GitHub #1059)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1059](https://github.com/phase-rs/phase/issues/1059);
+  free pitch-elemental graveyard hate/blocker played across
+  Legacy/Vintage.
+- **Investigated 2026-07-07.** The general CR 608.2a/b class ("a trigger
+  whose source leaves the battlefield before it resolves must still
+  resolve") is explicitly tested:
+  `fabricate_e2e_source_gone_servo_branch_still_creates_tokens`
+  (`database/synthesis.rs`) bounces the trigger's source mid-resolution
+  and asserts the trigger is NOT removed. `resolve_ability_chain`
+  (`game/effects/mod.rs`) has no source-existence gate. Endurance's
+  simple "up to one target player" ETB rides this same generic path.
+- **Action taken:** posted evidence as a comment (no permission to close
+  directly). No PR needed.
+
+### [bug-fix] ~~Mother of Runes doesn't let you choose the protection color~~ — already fixed (GitHub #624)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#624](https://github.com/phase-rs/phase/issues/624);
+  Middle-School/Premodern-era (Urza's Legacy) white-aggro staple, still
+  played across Legacy/Premodern/Canadian-Highlander today.
+- **Investigated 2026-07-07.** `crates/engine/tests/fixtures/integration_cards.json`
+  and the golden `mother_of_runes_ir.snap` both show a real
+  `Choose { choice_type: Color, persist: true }` step feeding
+  `Protection: ChosenColor`. `game/effects/choose.rs` sets
+  `WaitingFor::NamedChoice` for `ChoiceType::Color` — a genuine
+  interactive prompt, not a fixed/random pick.
+- **Action taken:** posted evidence as a comment (no permission to close
+  directly). No PR needed.

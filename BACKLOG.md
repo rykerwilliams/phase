@@ -483,32 +483,42 @@ so there's a record of what's already been resolved.
 
 ### [bug-fix] Ad Nauseam's repeat loop never adds revealed cards to hand (GitHub #1032)
 
-- **Status:** open
+- **Status:** in-progress — fixed, tested, PR open awaiting CI/review:
+  [phase-rs/phase#5315](https://github.com/phase-rs/phase/pull/5315)
 - **Source:** GitHub issue [phase-rs/phase#1032](https://github.com/phase-rs/phase/issues/1032),
   surfaced via the same Vintage-relevance sweep as the Underworld Breach
-  item above — no open PR addresses this.
+  item above.
 - **Verified Oracle text** (Scryfall, not from memory): "Reveal the top
   card of your library and put that card into your hand. You lose life
   equal to its mana value. You may repeat this process any number of
   times." ({3}{B}{B})
-- **Reported bug:** the repeat-loop UI reveals the top card each time
-  "repeat" is clicked but never actually moves it to hand; life loss is
-  batched and applied all at once at the end instead of per-repetition
-  as each card is added.
-- **Before implementing:** re-confirm this still reproduces on current
-  `main` — the issue is unlabeled/`needs-triage` and may already be stale.
-- **Prompt:**
-  > Fix Ad Nauseam (GitHub phase-rs/phase#1032): the "repeat this process"
-  > loop reveals the top card of the library each click but never puts it
-  > into hand, and life loss is applied once in bulk at the end instead of
-  > immediately after each individual reveal/hand-add. Verify current
-  > Oracle text against Scryfall before touching anything. This is a
-  > repeated-optional-effect pattern (reveal → move zone → lose life →
-  > ask to repeat) — trace how other "you may repeat this process" or
-  > iterative reveal effects are modeled in the engine first (per
-  > CLAUDE.md's "trace before you build") rather than writing a
-  > card-specific loop. Use `/add-interactive-effect` for the
-  > choice/WaitingFor round-trip piece.
+- **Confirmed real bug (2026-07-07)**, reproduced from scratch via parsed
+  Oracle text in an isolated worktree, through two rounds of
+  `/engine-planner` + `/review-engine-plan` (round 1 had a factual error
+  in its root-cause model — claimed `pending_continuation` was
+  last-write-wins/clobbering, when it actually accumulates via
+  `append_to_sub_chain` — which would have produced a non-discriminating
+  test; round 2 corrected this) and one clean `/review-impl` pass.
+- **Root cause:** `engine_resolution_choices.rs`'s `RepeatDecision`
+  accept-handler re-entered `resolve_ability_chain` without resetting
+  `state.waiting_for` away from the just-answered `RepeatDecision`
+  prompt, which fooled `waits_for_resolution_choice` into deferring each
+  iteration's `ChangeZone`(hand)/`LoseLife` sub-chain into
+  `pending_continuation` instead of running it immediately — deferred
+  pairs accumulated and all drained in one batch on decline, matching the
+  reported symptom exactly.
+- **Fix:** one-line `set_priority(state, player)` reset, mirroring the
+  sibling `decline` branch and the analogous `OptionalEffectChoice`
+  resume handler, both of which already do this. Class-level fix — covers
+  every `RepeatContinuation::ControllerChoice` card with a multi-step
+  body, not just Ad Nauseam. CR 107.1c + CR 608.2c verified against
+  `docs/MagicCompRules.txt`.
+- **Verification:** new discriminating integration test (asserts hand/life
+  *between* accepts, not just final aggregate — final totals are
+  identical whether the bug is present or not) confirmed to fail on the
+  unfixed code and pass on the fixed code; 9/9 sibling repeat-mechanism
+  tests and 3/3 existing lib unit tests unaffected; `cargo fmt`/`clippy
+  -D warnings` clean.
 
 ### [bug-fix] Pact of Negation doesn't lose the game on unpaid deferred cost (GitHub #1058)
 

@@ -562,33 +562,6 @@ so there's a record of what's already been resolved.
   > correctly; the original issue's claim about it not working appears to
   > be false.
 
-### [bug-fix] Violent Urge grants delirium bonus to all creatures, not just the target (GitHub #1272)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1272](https://github.com/phase-rs/phase/issues/1272);
-  Old School 93/94-legal (Legends) — flagged for completeness during a
-  format sweep, but honestly a minor/fringe card even in its own era, not
-  a real played staple. Low conviction, tracked anyway per instruction.
-- **Verified Oracle text:** "Target creature gets +1/+0 and gains first
-  strike until end of turn. Delirium — If there are four or more card
-  types among cards in your graveyard, that creature gains double strike
-  until end of turn." ({R})
-- **Reported bug:** with delirium active, double strike is granted to all
-  creatures instead of just the targeted creature.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Violent Urge (GitHub phase-rs/phase#1272): the delirium clause
-  > ("that creature gains double strike") must apply only to the single
-  > targeted creature, not all creatures — "that creature" refers back to
-  > the same target as the base +1/+0/first strike effect, it isn't a new
-  > unrestricted grant. Verify Oracle text against Scryfall first. This
-  > looks like a `~`/target-reference resolution bug likely shared by
-  > other delirium/threshold "that creature gains X" follow-up clauses —
-  > check whether the same reference-scoping bug affects other
-  > conditional-bonus cards with an identical "target creature ... ;
-  > condition — that creature also gains Y" shape before scoping the fix
-  > to just this card.
-
 ### [bug-fix] Solitary Confinement prevents damage to all players instead of just its controller (GitHub #1062)
 
 - **Status:** open
@@ -833,6 +806,28 @@ so there's a record of what's already been resolved.
 ---
 
 ## Done
+
+### [bug-fix] ~~Violent Urge grants delirium bonus to all creatures, not just the target~~ — already fixed (GitHub #1272)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1272](https://github.com/phase-rs/phase/issues/1272)
+- **Investigated 2026-07-07.** Verified against Scryfall's exact
+  verbatim text (including the real embedded newline between the base
+  clause and the Delirium clause). Parser AST dump confirmed both
+  clauses carry `affected: TargetFilter::ParentTarget` — "that creature"
+  correctly anaphors to the single cast-time target. Runtime test (3
+  creatures: target, same-controller bystander, opponent's creature)
+  confirmed only the target gains double strike.
+- **Root cause of why it's already fixed:** same "target X gets A.
+  [condition] — that X also gets B" template as Mu Yanling, Sky
+  Dignitary's +2 (issue #2922, "broadcasts to every matching permanent
+  instead of the parent target"), generically fixed by
+  `24afeefbb` ("fix: ParentTarget GenericEffect binding for targeted
+  pump/debuff abilities", #2999) — which landed after this issue was
+  filed. Violent Urge just never got a follow-up regression test or
+  issue closure.
+- **Action taken:** commented on the GitHub issue with this evidence;
+  no PR needed.
 
 ### [bug-fix] ~~Underworld Breach doesn't enforce its escape cost~~ — already fixed (GitHub #1033)
 

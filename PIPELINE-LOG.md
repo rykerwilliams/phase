@@ -179,3 +179,31 @@ not as a scientific benchmark.
   ~2.6h combined agent time, zero lines of engine code changed — the
   value was entirely in *not* shipping a wrong fix, plus fixing the
   meta-process gap that caused the wrong turn in the first place.
+
+## #1272 — Violent Urge
+
+- **Outcome:** no code change — already fixed generically by an
+  unrelated prior PR (#2999, "ParentTarget GenericEffect binding for
+  targeted pump/debuff abilities", fixing the same bug class reported
+  separately for Mu Yanling, issue #2922). Violent Urge just never got
+  a follow-up regression test or issue closure. Commented on
+  [phase-rs/phase#1272](https://github.com/phase-rs/phase/issues/1272).
+- **Planning:** 1 round, ~32m/121 tool calls. First fix this session to
+  explicitly read `PIPELINE-LOG.md` itself as a mandatory step before
+  investigating (per the prompt) — went straight to a real AST dump
+  plus a 3-creature runtime test (target/bystander/opponent) rather
+  than a multi-round back-and-forth, suggesting the standing-lessons
+  list is starting to pay for itself by shortening investigation time,
+  not just improving correctness.
+- **Independent spot-check:** confirmed the cited commit is a real
+  ancestor of the branch and that the described types/comments
+  (`ParentTarget`, the issue #2922 comment) actually exist in the
+  codebase, without needing to re-run the full scratch test myself.
+- **Running tally tonight:** 5 items investigated, 1 real bug fixed
+  (Ad Nauseam), 4 already-fixed/non-reproducing (Underworld Breach,
+  Pact of Negation, Violent Urge, plus several more closed out by
+  concurrent sessions working the same backlog — see `BACKLOG.md`'s
+  Done section). The false-positive rate in the original GitHub issues
+  is turning out to be very high once actually re-verified against
+  current `main` — worth remembering before assuming any `needs-triage`
+  issue is still live.

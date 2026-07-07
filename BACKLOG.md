@@ -53,55 +53,174 @@ so there's a record of what's already been resolved.
   > sync it from a fresh worktree before pinging. If both have already
   > merged, mark this backlog item done.
 
-### [feature] Implement 93/94 Old School as a constructed format
+### [feature] Implement Eternal Central retro formats (Old School 93-94, Old School 95, Middle School, Classic Magic)
 
 - **Status:** open
-- **Source:** 2026-07-07 planning discussion.
-- **Context (unresearched — verify before implementing, don't assume):**
-  - "Old School 93/94" is a real-world constructed Magic format restricting
-    legal cards to a specific early-era card pool (roughly Alpha/Beta/
-    Unlimited through some cutoff around Fallen Empires/Homelands/Ice Age,
-    depending on which community ruleset is followed) plus a banned list.
-    **Multiple real-world 93/94 rule committees exist with different exact
-    set cutoffs and banned lists** (e.g. Swedish rules vs. Eternal Central
-    vs. others) — confirm which specific ruleset to model, or whether to
-    make the cutoff/banned-list configurable, before implementing anything.
-    Do not assume a single canonical ruleset.
-  - This backlog file's own existing bug-fix items already use "Old School
-    93/94-legal" / "Middle-School-era" as descriptive era tags on several
-    cards (Violent Urge, Calming Licid, Molten Echoes, Solitary
-    Confinement, Mother of Runes) — that terminology is informal
-    prioritization context from bug triage, **not** evidence that a formal
-    `GameFormat` variant for either already exists in the engine. Check
-    `crates/engine/src/types/format.rs` (`GameFormat`/`FormatConfig`)
-    directly to confirm what formats are actually implemented today
-    (`commander()`, `standard()`, `brawl()` are confirmed to exist, seen
-    in test code this session) before assuming anything about existing
-    set-legality/banned-list infrastructure.
-  - Trace how an existing constructed format with a banned list and/or
-    restricted set pool is modeled (if one exists) before building new
-    infrastructure — this is exactly the kind of "trace an analogous
-    feature" case CLAUDE.md calls for. If no format currently models a
-    banned list or a restricted legal-set pool at all, that's a bigger,
-    genuinely new piece of infrastructure than just adding a format enum
-    variant, and should be scoped/estimated as such rather than assumed
-    to be a small addition.
+- **Source:** 2026-07-07 planning discussion. Authoritative ruleset source
+  (user-provided): https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md
+  — fetched and confirmed this session, quoted below. Re-fetch before
+  implementing in case the source has been updated since.
+- **Scope: four EC-attributed formats, not two** — the user's original ask
+  ("Old School 93/94 and Middle School") plus "all EC variants" expands to
+  all four Eternal Central formats on that page, since 95 and Classic Magic
+  are also EC-attributed and share most of their structure with 93-94/
+  Middle School:
+  1. **Old School 93-94** — Alpha, Beta, Unlimited, Arabian Nights,
+     Antiquities, Revised, Legends, The Dark, Fallen Empires. Reprints
+     allowed only with original frame/art. Restricted (1 copy): Ancestral
+     Recall, Balance, Black Lotus, Braingeyser, Chaos Orb, Channel,
+     Demonic Tutor, Library of Alexandria, Mana Drain, Mind Twist, all
+     five Moxes, Recall, Regrowth, Sol Ring, Time Vault, Time Walk,
+     Timetwister, Wheel of Fortune. Banned: Bronze Tablet, Contract from
+     Below, Darkpact, Demonic Attorney, Jeweled Bird, Rebirth, Tempest
+     Efreet. Mana burn applies; "No Draws" rule (tied matches after 50
+     minutes settled by Chaos Orb flip, not a draw).
+  2. **Old School 95** — 93-94's pool plus Fourth Edition, Ice Age,
+     Chronicles, Renaissance, Homelands. Restricted list = 93-94's plus
+     Demonic Consultation and Mana Crypt. Banned list = 93-94's plus
+     Amulet of Quoz and Timmerian Fiends. Same mana-burn/no-draws rules.
+  3. **Middle School** — 1995-2003 (Fourth Edition through Scourge).
+     Reprints allowed (Collector's Edition/International Collector's
+     Edition, World Championship, artist proofs; even modern-bordered
+     reprints "begrudgingly" allowed). **No restricted list** — 25 named
+     cards fully banned instead (Amulet of Quoz, Balance, Brainstorm,
+     Bronze Tablet, Channel, Dark Ritual, Demonic Consultation, Flash,
+     Goblin Recruiter, Imperial Seal, Jeweled Bird, Mana Crypt, Mana
+     Vault, Memory Jar, Mind's Desire, Mind Twist, Rebirth, Strip Mine,
+     Tempest Efreet, Timmerian Fiends, Tolarian Academy, Vampiric Tutor,
+     Windfall, Yawgmoth's Bargain, Yawgmoth's Will). Mana burn applies.
+     **"Damage Uses the Stack"** and Wish cycle functions "as Originally
+     Designed, Pre-M10 Rules Change" — see the engine-rules flag below,
+     this is NOT just a deck-legality filter.
+  4. **Classic Magic** — full 1993-2003 pool (Alpha through Scourge), no
+     new-border reprints of any kind (proxy or not). Its own restricted
+     list (37 cards, mostly a superset spanning both eras — Ancestral
+     Recall, Black Lotus, Necropotence, Vampiric Tutor, Yawgmoth's
+     Bargain/Will, etc.) and banned list (11 cards). Mana burn, damage on
+     the stack, wish-cycle restoration, banlist updates twice yearly
+     (Jan 1 / Jul 1 — likely irrelevant for a single-player-controlled
+     fork, but document the real-world cadence in case it matters later).
+  - **Stretch goal, not core scope:** "Eternal Chaos" on the same page is
+    a Lords-of-the-Pit-specific variant built on top of EC 93-94 (adds
+    booster-pack tutoring during matches, a dynamically-built sideboard
+    from opened packs instead of a pre-built one, and a "Gentleman's
+    Agreement" pre-match ban option) — it's NOT itself an EC-defined
+    format, it's LotP's own house rule layered on 93-94. Confirmed wanted
+    (2026-07-07), but explicitly lower priority than the four core EC
+    formats above — sequence it after those ship, since it depends on
+    93-94's card pool/restricted/banned lists already existing and adds a
+    genuinely new mechanic (in-match pack-opening + dynamic sideboard)
+    that isn't just a deck-legality variant.
+- **Architecture — the key open question, confirmed this session:**
+  - `GameFormat`/`FormatConfig`/`FormatMetadata` (`crates/engine/src/types/format.rs`)
+    is a real, well-established, self-documenting pattern — adding a
+    format is normally small (see `GameFormat::Premodern`, a close analog:
+    one enum variant, one `FormatConfig::premodern()` builder inheriting
+    from `standard()`, one `FormatMetadata` registry entry, one
+    `LegalityFormat` mapping). **There is real prior art for this exact
+    kind of task in this repo**: a full planning cycle already ran for
+    adding `GameFormat::Limited` — see `.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`,
+    committed at `80404a98b` (`.planning/` is gitignored and was later
+    stripped from tracking entirely — commit "Remove planning docs" — so
+    it no longer exists in a fresh checkout; retrieve it via `git show
+    80404a98b:.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`).
+    Use this as a concrete template for how a new-format planning doc has
+    actually been scoped in this repo before.
+  - **However**, `Premodern`'s (and every other existing format's)
+    per-card legality comes from an *externally-sourced* per-card
+    `legalities` field ingested into `CardLegalities`
+    (`crates/engine/src/database/legality.rs` + `card_db.rs`'s
+    `normalize_legalities(&entry.legalities)`) — this looks like it
+    mirrors Scryfall/MTGJSON's own bulk-data legality object keys
+    (`"standard"`, `"premodern"`, `"pioneer"`, etc.). **None of the four
+    EC formats above are expected to have that kind of external per-card
+    legality signal already populated in this project's card-data
+    pipeline** — they're niche community formats maintained by a
+    third-party rules body (Eternal Central), not tracked the same way
+    mainstream/Scryfall-recognized community formats like Premodern are.
+    Confirm this directly (check an actual card's raw ingested legality
+    data for any `"oldschool"`/`"middleschool"`/`"classic"` key) before
+    assuming either way — but if absent, as expected, the engine needs a
+    **new, locally-defined legality mechanism**: e.g. an explicit
+    legal-set-code list plus explicit restricted/banned name lists per
+    format, evaluated directly against each card's set code and name,
+    independent of the existing `CardLegalities` pipeline. Checked
+    `crates/engine/src/database/set_gating.rs` as a candidate for this
+    already existing — it does NOT fit; it's a pre-release embargo tool
+    (`GATED_SETS` env var, generation-time only), not a general
+    set-restriction mechanism.
+  - **Parameterize, don't proliferate** (per CLAUDE.md): these four
+    formats share a heavily overlapping, incrementally-expanding
+    structure (95 = 93-94's pool + 5 more sets + 2 more
+    restricted/banned; Middle School continues where 95 leaves off, no
+    restricted list; Classic Magic spans the whole 1993-2003 range with
+    its own combined lists). This strongly suggests ONE parameterized
+    shape (e.g. something like `EternalCentralRuleset { legal_sets:
+    &'static [&'static str], restricted: &'static [&'static str], banned:
+    &'static [&'static str], reprint_policy: ... }`) rather than four
+    independent hardcoded format implementations — design it that way
+    from the start rather than copy-pasting four near-identical blocks.
+  - **`DeckCopyLimit::UpTo(n)`** (already exists in `format.rs`, currently
+    used for per-card overrides like Relentless Rats/Nazgûl/Commander
+    singleton) may directly be the right building block for "restricted
+    to 1 copy" — check whether it can be reused format-wide for the
+    restricted lists above (93-94, 95, Classic Magic) rather than
+    inventing a second, parallel "restricted list" concept.
+  - **"Damage Uses the Stack" (Middle School, Classic Magic) is a real
+    pre-6th-edition (pre-"M10 rules change") core-rules difference, not a
+    deck-legality filter.** This is potentially a much bigger engine
+    undertaking than card-pool/banned-list filtering — investigate
+    whether the current engine's combat-damage resolution has any
+    hook-point for this at all before scoping it as "small." If it turns
+    out to require deep changes to how damage is dealt/ordered, treat
+    that as its own sub-project and consider shipping the deck-legality
+    half of these formats first, with old-damage-rules as a clearly
+    labeled follow-on rather than a blocking prerequisite.
+  - **Design/research output belongs in `.planning/phases/<NN>-<slug>/`**
+    (CONTEXT/RESEARCH/PLAN/SUMMARY/VERIFICATION docs per CLAUDE.md's own
+    "Planning" section) — this directory is gitignored and stays local,
+    decoupled from any PR, matching how the `GameFormat::Limited` cycle
+    above was actually run. Research/design can happen well before
+    implementation and by a different session/agent; don't conflate the
+    two phases or assume they need to happen back-to-back.
 - **Prompt:**
-  > Research and produce a plan (don't implement yet) for adding "93/94
-  > Old School" as a selectable constructed format in phase.rs. First,
-  > read `crates/engine/src/types/format.rs` to confirm exactly what
-  > `GameFormat`/`FormatConfig` supports today (legal-set restriction,
-  > banned lists, starting-life/mulligan variations, etc. — do not assume,
-  > verify by reading the actual code). Then determine which specific
-  > 93/94 ruleset to model (there are multiple real-world rules
-  > committees with different set cutoffs and banned lists — pick one and
-  > cite the source, or propose making it configurable) and confirm the
-  > exact card pool and banned list against that authoritative source, not
-  > from memory. If the engine has no existing restricted-legal-set-pool
-  > or banned-list mechanism at all, treat that as its own prerequisite
-  > building block (trace the closest analogous existing pattern first)
-  > rather than bolting format-specific logic onto card legality checks
-  > ad hoc. Report findings and a scoped plan before writing any code.
+  > Research and produce a plan (don't implement yet, write it to
+  > `.planning/phases/<NN>-eternal-central-formats/`) for adding four
+  > Eternal Central retro constructed formats to phase.rs: Old School
+  > 93-94, Old School 95, Middle School, and Classic Magic. Re-fetch
+  > https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md
+  > to confirm the exact card pools, restricted lists, and banned lists
+  > haven't changed since 2026-07-07 (quoted in this backlog item as of
+  > that date). First read `crates/engine/src/types/format.rs` in full
+  > (trace `GameFormat::Premodern` end-to-end as the closest existing
+  > analog) and `.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`
+  > (retrieve via `git show 80404a98b:.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`
+  > since `.planning/` is gitignored) as the concrete prior-art template
+  > for how a new-format planning cycle has actually been scoped in this
+  > repo before. Confirm directly (don't assume) whether the card-data
+  > pipeline's existing `CardLegalities`/`LegalityFormat` mechanism
+  > (`crates/engine/src/database/legality.rs`) has any per-card signal for
+  > these formats already; if not (expected, since these are
+  > Eternal-Central-maintained community formats not tracked by
+  > Scryfall/MTGJSON's own legality keys the way Premodern is), design a
+  > new, locally-defined legal-set-code + restricted/banned-name-list
+  > mechanism instead of extending the external-legality pipeline.
+  > Because these four formats share a heavily overlapping,
+  > incrementally-expanding structure, design ONE parameterized ruleset
+  > shape per CLAUDE.md's "parameterize, don't proliferate" principle
+  > rather than four independent implementations — check whether the
+  > existing `DeckCopyLimit::UpTo(n)` mechanism can serve as the
+  > restricted-list building block. Separately and explicitly investigate
+  > "Damage Uses the Stack" (Middle School, Classic Magic) — this is a
+  > real pre-6th-edition core-rules difference, not deck legality; report
+  > whether the current engine has any hook for pre-M10 damage rules at
+  > all, and if it's a large undertaking, propose shipping deck-legality
+  > for all four formats first with old-damage-rules scoped as a clearly
+  > separate follow-on. The LotP-specific "Eternal Chaos" variant
+  > (booster-pack tutoring built on 93-94, not itself an EC-defined
+  > format) is a confirmed stretch goal — sequence it after the four core
+  > EC formats ship, not alongside them; note it in the plan but don't
+  > block on it.
 
 ### [research] Audit the AWS host before hosting phase.rs there
 

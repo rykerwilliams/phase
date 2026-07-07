@@ -149,6 +149,91 @@ do **not** hardcode four new `GameFormat` variants.
   and this design does **not** need to accommodate it. Flagged so a reader does
   not mistakenly try to fold Vanguard into the custom-format layer.
 
+## Additional validation example — Classic Legacy / "Lost Legacy" (community, non-EC)
+
+A fifth real-world community format, independent of Eternal Central, that
+further validates the schema's generality. Two distinct sources, both
+user-provided this session — kept separate since they describe two different
+things under overlapping branding:
+
+- **Classic Legacy** (`https://classiclegacymtg.com/`, fetched 2026-07-07):
+  Alpha through Rise of the Eldrazi (2010). **No restricted list at all** — a
+  57-card banned list only (all five Moxes, Black Lotus, Ancestral Recall,
+  Demonic Tutor, Yawgmoth's Will, Tinker, etc. are fully **banned**, not
+  restricted-to-1 the way EC's 93-94 treats them). Explicitly states three
+  rules deltas from current Comprehensive Rules: "The London Mulligan is
+  used" (i.e. explicitly the *modern* default, not an old-style mulligan),
+  "There is NO mana burn," and "Combat damage does not use the stack."
+  **This is structurally the inverse of EC's Middle School/Classic Magic**:
+  an old, broad card pool paired with entirely *modern* choices on every
+  `LegacyRuleSet` axis. That is a stronger decoupling proof than Block
+  Constructed (§ above) — it shows card-pool era and legacy-rules flags are
+  not just independently *toggleable in principle*, a real, currently-run
+  community format actually uses that independence (old pool + modern
+  rules), not only the "old pool + old rules" combination the four EC
+  presets happen to use. No new `LegacyRuleSet` field is needed to support
+  it — it is fully expressible by *not* setting any of the flags already
+  designed, on a broader `legal_sets` list.
+- **"Lost Legacy 606"** (a dated tab titled "Lost Legacy" / ref. `606`,
+  user-pasted content from a linked Google Sheet at
+  `docs.google.com/spreadsheets/.../1rf9U9k93_.../htmlview#gid=0` — the sheet
+  itself is a JS-rendered app and was **not** independently fetchable;
+  content below is transcribed as pasted by the user, not independently
+  re-verified against the live sheet). Labelled "(Legacy June 2006 - Pre
+  Coldsnap)", sets "Alpha - Dissension/9th Ed., + Portals and Starter" — a
+  **dated historical snapshot** of what tournament Legacy looked like at a
+  specific point in time, distinct from the single fixed "Classic Legacy"
+  ruleset above. This suggests the source project maintains *multiple*
+  dated snapshots (naming pattern implies `606` = "2006, month 06"), which
+  is an interesting further validation of "format as data" (a snapshot is
+  just another `CustomFormatDef` instance with its own `legal_sets` cutoff
+  and its own banned list) — **noted as a potential future direction, not
+  investigated further and not in scope for the four-EC-preset MVP.**
+
+  Rules deltas listed for this specific snapshot, and how each maps to what
+  is already designed (or explicitly does not):
+  - "Wishes can retrieve exiled cards" — **independently confirms**
+    RESEARCH.md §9's pre-M10 Wish finding via a second, unrelated source.
+  - "Mana Burn is in effect" + "Mana empties at end of phase" — **confirms**
+    the mana-burn hook point already identified (RESEARCH.md §5): the
+    "empties at end of phase" phrasing matches the engine's actual
+    step/phase-boundary pool-emptying mechanism almost exactly.
+  - "Damage uses the stack" — same as EC Middle School/Classic Magic,
+    already modeled.
+  - **"Same Legends are buried on resolution"** — this is the legend rule,
+    described using **pre-2004 templating** ("bury" was a distinct keyword
+    action for "destroy, cannot be regenerated" before being folded into
+    plain "destroy" templating around 2004). The phrase "on resolution" is
+    a potentially significant additional data point for RESEARCH.md §10's
+    `LegendRuleScope::PreM14AnyController`: it may indicate the *original*
+    legend rule was not a continuously-checked state-based action the way
+    both the modern rule and the currently-designed `PreM14AnyController`
+    variant are, but instead resolved as an immediate effect at the moment
+    a legendary permanent entered (or a spell/ability finished resolving).
+    **This needs a follow-up rules-history check before being treated as
+    confirmed** — flagged here rather than silently folded into §10's
+    existing SMALL-effort estimate, since a genuinely different resolution
+    *timing* (immediate effect vs. SBA) could change that estimate.
+  - **"CMC of split card in hand is X or X not the total"** — a real
+    historical difference in how split cards' mana value was calculated
+    outside the stack, but the precise mechanic and the years it applied
+    are **not verified this session** (nothing in RESEARCH.md addresses
+    this). Recorded as an **open flag candidate, not yet designed** —
+    do not add a `LegacyRuleSet` field for this without first verifying the
+    actual historical rule via an authoritative source, per this project's
+    "verify before annotating" discipline.
+  - **"Draws determined by foreign card identification"** — meaning
+    genuinely unclear; not investigated, not designed, flagged as an open
+    question rather than guessed at.
+  - "Current Oracle on all cards" and "Reprints OK" — policy statements
+    about which printing/wording to use, not engine-modelable rules deltas;
+    same category as the already-noted reprint-fidelity open question
+    (Open item 2, above).
+  - "Proxies must be identifiable at arms length" — physical-tournament
+    logistics with zero gameplay/engine relevance. **Explicitly out of
+    engine scope**, noted only so a future reader does not wonder why it
+    was dropped.
+
 ## Stretch goal (explicitly lower priority — do not design in depth)
 
 - **Eternal Chaos** (a Lords-of-the-Pit variant on top of 93-94, NOT an

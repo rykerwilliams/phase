@@ -562,30 +562,6 @@ so there's a record of what's already been resolved.
   > correctly; the original issue's claim about it not working appears to
   > be false.
 
-### [bug-fix] Solitary Confinement prevents damage to all players instead of just its controller (GitHub #1062)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1062](https://github.com/phase-rs/phase/issues/1062);
-  Middle-School-era (Judgment) casual prison piece — moderate match, not
-  a top competitive staple even in its era, tracked for completeness.
-- **Verified Oracle text:** "At the beginning of your upkeep, sacrifice
-  this enchantment unless you discard a card. Skip your draw step. You
-  have shroud. Prevent all damage that would be dealt to you." ({2}{W})
-- **Reported bug:** the damage-prevention clause is being applied
-  globally (prevents damage to all players) instead of scoped to the
-  enchantment's controller only.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Solitary Confinement (GitHub phase-rs/phase#1062): "Prevent all
-  > damage that would be dealt to you" must scope to the enchantment's
-  > controller only, not all players. Verify Oracle text against Scryfall
-  > first. This looks like a `you`-reference resolved as a global/no-op
-  > scope instead of `ControllerRef::You` in a damage-prevention shield —
-  > check whether the same "prevent all damage to you" pattern (shared by
-  > other damage-prevention enchantments/effects) has the same
-  > controller-scoping bug elsewhere before fixing this one card in
-  > isolation.
-
 ### [bug-fix] Calming Licid: transform effect no-ops and summoning sickness misapplied (GitHub #605, #604)
 
 - **Status:** open
@@ -806,6 +782,29 @@ so there's a record of what's already been resolved.
 ---
 
 ## Done
+
+### [bug-fix] ~~Solitary Confinement prevents damage to all players instead of just its controller~~ — already fixed (GitHub #1062)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1062](https://github.com/phase-rs/phase/issues/1062)
+- **Investigated 2026-07-07.** Parser (`oracle_replacement.rs`) already
+  maps "dealt to you" to `damage_target_controller()`, and an existing
+  test named for this exact card
+  (`replacement_prevent_all_damage_to_you_without_duration`) asserts
+  it. Fix commit `a46cf1002` ("Scope damage prevention to controller",
+  2026-05-27) confirmed as an ancestor of current `main` — a generic
+  fix across 9 call sites (Hallow, Safe Passage, Solitary Confinement,
+  redirection shields), not card-specific. Reporter's build
+  (`v0.1.36 1e14782`, 2026-05-25) predates the fix by two days — real
+  bug when filed, simply never closed out. Runtime match
+  (`player_scope_matches`) is an exhaustive typed-enum match, already
+  tested for controller-vs-opponent scoping. Confirmed the parser logic
+  and test assertion directly from source myself; the compiled test run
+  itself hit the same incremental-build corruption already logged as
+  standing lesson 10 (heavy concurrent load from other active
+  worktrees), not a real blocker.
+- **Action taken:** commented on the GitHub issue with this evidence;
+  no PR needed.
 
 ### [bug-fix] ~~Violent Urge grants delirium bonus to all creatures, not just the target~~ — already fixed (GitHub #1272)
 

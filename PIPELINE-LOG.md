@@ -234,6 +234,39 @@ not as a scientific benchmark.
   current `main` — worth remembering before assuming any `needs-triage`
   issue is still live.
 
+## #1062 — Solitary Confinement
+
+- **Outcome:** no code change — already fixed generically by
+  `a46cf1002` ("Scope damage prevention to controller", 2026-05-27,
+  9 call sites across Hallow/Safe Passage/Solitary Confinement/
+  redirection shields). Reporter's build predates the fix by two days.
+  Commented on
+  [phase-rs/phase#1062](https://github.com/phase-rs/phase/issues/1062).
+- **Planning:** 1 round, ~16m/45 tool calls — fastest investigation
+  tonight, likely because the planner's own attempted confirmatory test
+  run got interrupted by machine load (see below) and it correctly
+  relied on a thorough manual source/git-history trace instead of
+  waiting indefinitely.
+- **Independent spot-check hit the same lesson-10 environment ceiling
+  directly**: my own `cargo test` run for the exact named test was
+  killed after a 5-minute timeout, then on retry with a 10-minute
+  timeout it ran to completion but failed to *compile* with an
+  incremental-build cache corruption error (`error copying object
+  file... The system cannot find the file specified`) — almost
+  certainly caused by the ~13 other worktrees compiling the same
+  `engine` crate concurrently on this machine tonight. Did not treat
+  this as inconclusive: read the actual parser match arm and the actual
+  test assertion directly from source instead (lesson 10's prescribed
+  fallback), which was sufficient on its own.
+- **Process note for future sessions on shared/busy machines:** once a
+  compile failure looks like a filesystem/toolchain artifact (copy
+  errors, missing incremental files) rather than a genuine type/logic
+  error in the diff, stop retrying the same command and either (a) trace
+  the claim manually from source, or (b) wait for concurrent load to
+  drop rather than repeatedly re-triggering full recompiles that compete
+  for the same target directory contention this session already avoided
+  by using per-worktree target dirs.
+
 ## #1077 — Relic of Progenitus (concurrent session)
 
 - **Outcome:** real bug in the first ability only ("target player exiles

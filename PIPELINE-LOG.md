@@ -93,6 +93,32 @@ not as a scientific benchmark.
    upstream PR immediately, not bundled with divergent fork state, or it
    will quietly never take effect. Fixed via
    [phase-rs/phase#5342](https://github.com/phase-rs/phase/pull/5342).
+10. **A fix can compile clean and pass its own test while sitting on a
+    dead code path for the real card.** Relic of Progenitus (#1077):
+    the fix modified `inject_subject_target`'s `Effect::ChangeZone` arm,
+    and a self-written test asserted a top-level `ChangeZone` effect —
+    both looked plausible and the code compiled. CI failed the new test
+    on the real parse: the actual emitted shape was
+    `Effect::TargetOnly { target: Player }` wrapping a `sub_ability`,
+    because `lower_subject_predicate_ast` has an *earlier* return
+    (mod.rs:16674, for any "target player" + `ChangeZone`/
+    `ChangeZoneAll` combo) that fires before `inject_subject_target` is
+    ever reached. The original fix and test were internally consistent
+    with each other but never with the production dispatch order.
+    Lesson: when a function has multiple early returns before the code
+    you're modifying, trace which one the *actual* real-world input
+    hits (e.g. via a debug print of the parsed AST, or careful manual
+    walk of every guard in order) — do not assume the arm you found via
+    grep is the one that executes. Treat a locally-compiling,
+    locally-passing test as necessary, not sufficient; CI (or a genuine
+    live run against the real emitted AST) is the actual gate. Also:
+    background `cargo test`/`cargo check` runs on this session's sandbox
+    were repeatedly killed mid-compile at the same point (3+ times in a
+    row) even with no explicit timeout set — a real, unexplained
+    environment ceiling distinct from the "slow builds" of lesson 6;
+    when hit repeatedly, fall back to `cargo check` plus careful manual
+    trace rather than retrying indefinitely, and say so explicitly in
+    the PR rather than silently shipping unverified.
 
 ---
 
@@ -207,3 +233,44 @@ not as a scientific benchmark.
   is turning out to be very high once actually re-verified against
   current `main` — worth remembering before assuming any `needs-triage`
   issue is still live.
+
+## #1077 — Relic of Progenitus (concurrent session)
+
+- **Outcome:** real bug in the first ability only ("target player exiles
+  a card from their graveyard" bound to the activator instead of the
+  targeted player); the second ability ("exile all graveyards, draw a
+  card") was confirmed already working, narrowing the original two-part
+  report. Root cause: `parse_zone_suffix_nom`'s "their" possessive
+  parses scope-agnostically as `Owned { controller: ScopedPlayer }`,
+  uncorrected for an explicitly *targeted* subject. Fixed by
+  generalizing `rebind_owned_scope` (previously hardcoded to
+  `ControllerRef::ChosenPlayer` for the Bounce/Skullwinder case) to
+  accept any `ControllerRef`. Same class also covers Scrabbling Claws,
+  Merrow Bonegnawer, Graveyard Shovel, Grave Birthing, and Gravestorm.
+- **Round 1 shipped to a wrong code path — see standing lesson 10.**
+  The fix was applied in `inject_subject_target`'s `ChangeZone` arm and
+  a self-written test asserted a top-level `ChangeZone` effect; both
+  compiled and the test passed locally. CI (`matthewevans`) failed the
+  test on the real parse: production actually emits `TargetOnly{target:
+  Player}` wrapping a `sub_ability`, via an *earlier* return in
+  `lower_subject_predicate_ast` (mod.rs:16674) that fires before
+  `inject_subject_target` is ever reached for this exact card shape.
+  Round 2 applied the same `rebind_owned_scope` call at the actual
+  early-return site and rewrote the test against the real `TargetOnly`+
+  `sub_ability` AST shape (mirroring the existing
+  `target_subject_damage_equal_to_its_power_uses_target_source_power`
+  precedent).
+- **Repeated background-build kills:** `cargo test`/`cargo check` in a
+  fresh worktree were killed mid-compile 3 times in a row at the
+  identical point (`Compiling engine v0.18.0`), with no explicit timeout
+  set on the later attempts — a real environment ceiling, not
+  contention (dependency checks always completed fine first). Round 1
+  shipped on `cargo check`-level confidence plus source trace after
+  hitting this; round 2's retest completed normally once the actual
+  compile error (a second missed `rebind_owned_scope` call site,
+  `retarget_effect_to_chosen_player`'s `Bounce` arm) was fixed.
+- **PR:** [phase-rs/phase#5347](https://github.com/phase-rs/phase/pull/5347).
+- **Concurrency note:** this item was worked by a separate concurrent
+  session from the one that authored the entries above — logged here
+  for the shared lesson (10), not to duplicate this file's per-session
+  timing convention.

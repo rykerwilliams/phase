@@ -25,6 +25,84 @@ so there's a record of what's already been resolved.
 
 ## Open
 
+### [infra] Follow up on PR #5236 and PR #5304 (mulligan bottoming fix)
+
+- **Status:** open
+- **Source:** 2026-07-07, this session's Serum Powder / CR 103.5 mulligan
+  bottoming fix.
+- **Context:** As of 2026-07-07, PR [phase-rs/phase#5236](https://github.com/phase-rs/phase/pull/5236)
+  (the core mulligan-declare-point-bottoming fix) is CI-green and
+  **approved** by `matthewevans`, but not yet confirmed merged. PR
+  [phase-rs/phase#5304](https://github.com/phase-rs/phase/pull/5304) (the
+  isolated `.claude/skills/add-interactive-effect/SKILL.md` doc fix, split
+  out of #5236 because `.claude/skills/**` is a hard-stop path for the
+  automated PR review loop per `.agents/pr-review-policy.toml`) is
+  CI-green but still shows `CHANGES_REQUESTED` from the same reviewer —
+  expected and permanent by design, since skill-file PRs are excluded
+  from that automated loop entirely. #5304 needs a human to merge it
+  directly; it will never clear the bot review on its own.
+- **Follow up around 2026-07-14 (about a week out)** if neither has moved:
+  check whether #5236 actually got merged despite approval, and whether
+  #5304 has been merged manually or needs a nudge.
+- **Prompt:**
+  > Check the current status of phase-rs/phase PR #5236 and PR #5304
+  > (`gh pr view 5236 --repo phase-rs/phase`, `gh pr view 5304 --repo
+  > phase-rs/phase`). If either is still open with no new activity, post a
+  > polite follow-up comment or ping asking for merge. If #5236 has
+  > drifted out of sync with `origin/main` (check `mergeStateStatus`),
+  > sync it from a fresh worktree before pinging. If both have already
+  > merged, mark this backlog item done.
+
+### [feature] Implement 93/94 Old School as a constructed format
+
+- **Status:** open
+- **Source:** 2026-07-07 planning discussion.
+- **Context (unresearched — verify before implementing, don't assume):**
+  - "Old School 93/94" is a real-world constructed Magic format restricting
+    legal cards to a specific early-era card pool (roughly Alpha/Beta/
+    Unlimited through some cutoff around Fallen Empires/Homelands/Ice Age,
+    depending on which community ruleset is followed) plus a banned list.
+    **Multiple real-world 93/94 rule committees exist with different exact
+    set cutoffs and banned lists** (e.g. Swedish rules vs. Eternal Central
+    vs. others) — confirm which specific ruleset to model, or whether to
+    make the cutoff/banned-list configurable, before implementing anything.
+    Do not assume a single canonical ruleset.
+  - This backlog file's own existing bug-fix items already use "Old School
+    93/94-legal" / "Middle-School-era" as descriptive era tags on several
+    cards (Violent Urge, Calming Licid, Molten Echoes, Solitary
+    Confinement, Mother of Runes) — that terminology is informal
+    prioritization context from bug triage, **not** evidence that a formal
+    `GameFormat` variant for either already exists in the engine. Check
+    `crates/engine/src/types/format.rs` (`GameFormat`/`FormatConfig`)
+    directly to confirm what formats are actually implemented today
+    (`commander()`, `standard()`, `brawl()` are confirmed to exist, seen
+    in test code this session) before assuming anything about existing
+    set-legality/banned-list infrastructure.
+  - Trace how an existing constructed format with a banned list and/or
+    restricted set pool is modeled (if one exists) before building new
+    infrastructure — this is exactly the kind of "trace an analogous
+    feature" case CLAUDE.md calls for. If no format currently models a
+    banned list or a restricted legal-set pool at all, that's a bigger,
+    genuinely new piece of infrastructure than just adding a format enum
+    variant, and should be scoped/estimated as such rather than assumed
+    to be a small addition.
+- **Prompt:**
+  > Research and produce a plan (don't implement yet) for adding "93/94
+  > Old School" as a selectable constructed format in phase.rs. First,
+  > read `crates/engine/src/types/format.rs` to confirm exactly what
+  > `GameFormat`/`FormatConfig` supports today (legal-set restriction,
+  > banned lists, starting-life/mulligan variations, etc. — do not assume,
+  > verify by reading the actual code). Then determine which specific
+  > 93/94 ruleset to model (there are multiple real-world rules
+  > committees with different set cutoffs and banned lists — pick one and
+  > cite the source, or propose making it configurable) and confirm the
+  > exact card pool and banned list against that authoritative source, not
+  > from memory. If the engine has no existing restricted-legal-set-pool
+  > or banned-list mechanism at all, treat that as its own prerequisite
+  > building block (trace the closest analogous existing pattern first)
+  > rather than bolting format-specific logic onto card legality checks
+  > ad hoc. Report findings and a scoped plan before writing any code.
+
 ### [research] Audit the AWS host before hosting phase.rs there
 
 - **Status:** open

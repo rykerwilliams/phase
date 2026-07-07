@@ -392,3 +392,154 @@ toggle as a *wording* one. A clearer name is `pre_m10_wish_reaches_exile` (or
 `wish_reaches_removed_from_game`) — it names the actual behavior (Wishes reach
 owned face-up exile). See PLAN naming note. This is not a no-op / wording-only
 flag; it is a real, testable pool-widening.
+
+## 10. Legend rule — historical scope change is REAL; engine hardcodes modern; flag is SMALL
+
+The "legend rule" (colloquially "the legend rule") was introduced by the
+*Legends* set (1994) — a set legal in EC's Old School 93-94 and 95 — and its
+governing rule has a documented history of change. Investigated with the same
+rigor as §5/§6/§9. All dates/wordings below are web-verified (not from memory);
+the current CR wording is verified directly against
+`docs/MagicCompRules.txt` in this checkout.
+
+### 10a. What the rule said at each point in history (web-verified)
+
+Sources: WotC "Legendary Rule Change" (magic.wizards.com, 2013-05-23, via the
+2013-07 M14 rules-tips summary); MTG Wiki "Legendary/Legend rule"; Magic Judges
+rules-tips "M14 Rules changes! Legendary permanents"
+(blogs.magicjudges.org/rulestips/2013/07/m14-rules-changes-legendary-permanents/).
+
+- **Legends (1994) → pre-M14 (through 2013): NOT per-controller — global.** If
+  two or more legendary permanents with the *same name* were on the battlefield,
+  they were affected **regardless of which player(s) controlled them**. The exact
+  mechanic shifted across eras (early "first legend in play trumps / newest is
+  denied"; Sixth Edition 1999 unified it across all legendary permanent types
+  with the "both go to the graveyard" form; *Champions of Kamigawa* 2004 changed
+  it to a "nullification" variant), but the invariant across every pre-M14 form
+  is that **same-named legends interacted across controllers** — two different
+  players could not each keep their own copy of the same legendary permanent.
+- **Magic 2014 (effective 2013-07-13, the M14 prerelease): today's
+  per-controller rule.** Rewritten so that only when *a single player* controls
+  two or more legendary permanents with the same name does that player choose one
+  to keep and put the rest into their owners' graveyards; it **does not** affect
+  same-named legendaries controlled by *different* players. This is the version
+  the engine implements (see §10c).
+- **Ixalan (effective 2017-09-28, day before release; NOT Dominaria 2018):
+  planeswalker uniqueness folded into the legend rule.** Before Ixalan,
+  planeswalkers used a separate **"planeswalker uniqueness rule"** keyed on
+  planeswalker *type* (a player couldn't control two planeswalkers sharing a
+  type, e.g. two different "Jace" cards). Ixalan removed that rule, gave all
+  past/present/future planeswalkers the `legendary` supertype via Oracle errata,
+  and made them subject to the *name*-based legend rule instead. (The task's
+  "around 2018's Dominaria" guess is **incorrect** — the correct set/date is
+  Ixalan, 2017-09-28. Dominaria 2018 is unrelated to this change.)
+
+### 10b. Current CR wording — verified against `docs/MagicCompRules.txt`
+
+The legend rule is a **state-based action**, CR **704.5j** (verified by grep;
+the number is not guessed):
+
+- `docs/MagicCompRules.txt:5510` — **CR 704.5j**: "If two or more legendary
+  permanents with the same name are controlled by the same player, that player
+  chooses one of them, and the rest are put into their owners' graveyards. This
+  is called the 'legend rule.'" (Note "**by the same player**" — the modern
+  per-controller scope, in the rule text itself.)
+- `docs/MagicCompRules.txt:8187-8188` — glossary "Legend Rule": "…causes a
+  player who controls two or more legendary permanents with the same name to put
+  all but one into their owners' graveyards."
+- `docs/MagicCompRules.txt:1459` — **CR 205.4d** cross-references 704.5j.
+- **Planeswalker uniqueness is confirmed obsolete in the current CR:**
+  `docs/MagicCompRules.txt:1721` — **CR 306.4**: "Previously, planeswalkers were
+  subject to a 'planeswalker uniqueness rule'… This rule has been removed and
+  planeswalker cards printed before this change have received errata… to have the
+  legendary supertype… they are subject to the 'legend rule' (see rule 704.5j)."
+  And `docs/MagicCompRules.txt:8580-8581` — glossary "Planeswalker Uniqueness
+  Rule (Obsolete)".
+- (Contrast: the world rule, CR 704.5k, `docs/MagicCompRules.txt:5512`, is a
+  distinct global/choiceless SBA — a useful structural precedent, see §10d.)
+
+### 10c. Is it a REAL functional difference? — YES
+
+**Verdict: a genuine functional / gameplay difference, not wording-only** — same
+class as mana burn (§5) and pre-M10 Wish (§9). Under the pre-M14 rule, two
+*different* players could **not** simultaneously keep two copies of the same
+legendary permanent (the second to resolve, or both, would be put into the
+graveyard as an SBA — no controller kept one). Under the modern rule each player
+independently keeps one. This changes the *set of legal board states*, directly
+observable at the table (e.g. a mirror-match where both players resolve the same
+legend: pre-M14, both die; modern, each keeps one). It is not a no-op flag.
+
+**Relevance to the four EC presets — HONEST CAVEAT.** EC's published rulesets
+(§1, re-fetched 2026-07-07) list their legacy-rule exceptions explicitly per
+format (93-94/95 = mana burn only; Middle School / Classic = mana burn +
+damage-on-stack + wish). **None of the four lists a legend-rule reversion**, so
+the four EC presets play the *modern* legend rule and set this flag to its
+default. The legend-rule scope is therefore a **general historical-rules axis**
+the custom-format engine should be able to express (exactly the orthogonality
+argument Block Constructed makes for `mana_burn`, PLAN note), **not** a behavior
+any of the four current presets turns on. Do not silently flip it on for the EC
+presets. Two further points confirm the EC-scope impact is minimal today:
+(i) *planeswalker uniqueness is entirely moot for these formats* — all four pools
+top out at Scourge (2003), and planeswalkers did not exist until Lorwyn (2007),
+so no EC-legal card is a planeswalker and no separate planeswalker-uniqueness
+flag is needed for this project; (ii) the legend-rule scope difference only
+manifests in cross-controller same-name mirrors, which are rare in singleton-ish
+retro metagames but *are* legal board states, so modeling it is correct-for-the-
+class even if the four presets default it off.
+
+### 10d. Engine implementation — HARDCODED to the modern (per-controller) rule
+
+Searched `crates/engine/src/game/` for "legend"; the SBA lives in `sba.rs`.
+
+- **`check_legend_rule` (`sba.rs:902-956`) is unambiguously per-controller.** It
+  loops **per player** (`for player_idx in 0..state.players.len()`, `:910`),
+  filters candidates to `obj.controller == player_id` (`:920`), groups by name
+  **within that one controller's permanents** (`by_name`, `:935-940`), and for
+  any name with ≥2 pauses with `WaitingFor::ChooseLegend { player, legend_name,
+  candidates }` (`:950-954`) so the controller *chooses* one to keep. Both the
+  cross-controller-independence and the player-choice are the modern M14 rule.
+  Annotated CR 704.5j at `:167`, `:899`, `:924`.
+- The exemption path is separate and reusable: `legend_rule_exempt` /
+  `legend_rule_exempt_with_gate` (`sba.rs:864-897`) consult the
+  `LegendRuleDoesntApply` static (Mirror Gallery / Sakashima / Mirror Box); it is
+  the single authority and already gates the candidate filter (`:926`).
+- **No legacy scope toggle exists anywhere** — there is no flag, enum, or config
+  read in `check_legend_rule`; the per-controller behavior is structural.
+
+### 10e. Size of re-adding the pre-M14 (any-controller) rule as a legacy flag — SMALL
+
+The pre-M14 form is actually *structurally simpler* than the modern one: it is
+**global** (one group per name across all controllers) and **choiceless** (all
+same-named legendaries in a ≥2 group go to their owners' graveyards, no player
+selection, no `WaitingFor`). The engine **already has this exact shape** in
+`check_world_rule` (`sba.rs:1348`, CR 704.5k — global, choiceless) and
+`check_role_uniqueness` (`sba.rs:1190`), and it already has the SBA-departure
+mover used by every SBA (`move_sba_departing_permanent`, CR 704.5 zone-pipeline
+mover at `sba.rs:618`). So the change is:
+
+1. Add a scope field to `LegacyRuleSet` (PLAN §1) — a **typed enum**, not a bool
+   (per CLAUDE.md "typed enum over raw bool"), because the historical space has
+   more than a clean binary and a typed enum leaves room without a later refactor:
+   `LegendRuleScope { Modern, PreM14AnyController }` (default `Modern`).
+2. Branch once at the top of `check_legend_rule`: when the resolved
+   `GameState.format_config` legacy scope is `PreM14AnyController`, build the
+   name groups **without** the `obj.controller == player_id` filter (all
+   controllers) and, for any ≥2 group, route every member through the existing
+   `move_sba_departing_permanent` — mirroring `check_world_rule`'s
+   global-choiceless structure — instead of pausing with `WaitingFor::ChooseLegend`.
+   The `legend_rule_exempt_with_gate` filter is reused unchanged.
+
+No new WaitingFor variant, no new mover, no new state machine, full reuse of the
+world-rule choiceless-global precedent and the shared SBA departure pipeline.
+**Size: SMALL** — comparable to mana burn (§5) and pre-M10 Wish (§9); materially
+smaller than damage-on-stack (§6). The only design nuance is scoping the enum:
+model just `Modern` vs a single consolidated `PreM14AnyController` "all
+same-named copies across all controllers go to the graveyard" form (the Sixth-
+Edition "both die" version, which is the one that changes cross-controller legal
+board states); do **not** attempt to reproduce the era-specific "first-in
+trumps" / Kamigawa "nullification" micro-variants — they are out of scope and a
+future enum variant can carry them if a format ever needs one. Because the flag
+re-enables a rule the current CR replaced (M14), annotate it as a *legacy rule
+reverting the M14 change* and cite CR 704.5j (the modern boundary being relaxed),
+exactly as mana burn cites the obsolete-glossary entry and the Wish flag cites
+CR 400.11.

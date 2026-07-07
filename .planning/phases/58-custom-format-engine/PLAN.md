@@ -33,6 +33,35 @@ EC formats specifically:
 No arm anywhere may read `if format == OldSchool93_94`. Behavior is driven by
 the resolved `CustomFormatDef` data only.
 
+**Block Constructed — validation that the two axes are genuinely decoupled.**
+"Block Constructed" formats (legality restricted to the sets of one block/era)
+are a clean proof that the design's two axes — the legal-set-code list vs. the
+`LegacyRuleSet` era-rule flags — are properly orthogonal, not entangled:
+
+- A **modern-era block** needs *only* the legal-set-code axis with **all
+  `LegacyRuleSet` flags false / defaulted** (`mana_burn: false`,
+  `damage_uses_stack: false`, `pre_m10_wish_reaches_exile: false`,
+  `legend_rule_scope: Modern`). It is a `CustomFormatDef` that is purely a
+  set-list restriction.
+- A **pre-M10-era block** (a block from before the 2010 "M10" rules update)
+  would set `mana_burn: true` (and potentially `pre_m10_wish_reaches_exile` /
+  `legend_rule_scope` depending on the exact era) via the **same** mechanism —
+  proving `LegacyRuleSet` is *not* special-cased to the four EC presets but is a
+  genuinely general axis any format opts into based on which era's rules it
+  represents. The four EC formats are simply the first four consumers of an axis
+  that is open to Block Constructed and any future era format alike.
+
+**Legal-set list is a plain arbitrary `Vec<SetCode>`, not a "block" enum.**
+Real-world Block Constructed formats have sometimes been legal only for a
+*subset* of a block's sets (not always the full canonical block), so the legal-
+set mechanism is modeled as a plain arbitrary list of set codes (`legal_sets:
+Vec<SetCode>`, §1) rather than any higher-level "block" abstraction tied to
+WotC's own block groupings. Arbitrary subsets fall out of a plain list for free
+— no "block" type, no special-casing, and a format author can include exactly
+the set codes they want. (This also matches the EC formats, whose pools are
+hand-curated set lists that include special reprint sets like CE/ICE and do not
+map onto any single WotC block.)
+
 ### Building Blocks — reused, not reinvented
 
 | Need | Existing block reused | Location |
@@ -99,7 +128,7 @@ ReprintPolicy {                         // enum — enforceable today only at se
     AllowAnyPrinting,                   // Middle School "begrudgingly"
 }
 
-LegacyRuleSet {                         // three INDEPENDENT toggles (RESEARCH §8)
+LegacyRuleSet {                         // INDEPENDENT era-rule axes (RESEARCH §8, §10)
     mana_burn: bool,
     damage_uses_stack: bool,
     pre_m10_wish_reaches_exile: bool,   // RESEARCH §9: Wishes reach owned face-up
@@ -108,8 +137,33 @@ LegacyRuleSet {                         // three INDEPENDENT toggles (RESEARCH �
                                         // placeholder `pre_m10_wish_templating`
                                         // — it is a functional POOL-SCOPE toggle,
                                         // not a wording/templating change.
+    legend_rule_scope: LegendRuleScope, // RESEARCH §10: modern per-controller
+                                        // (default) vs pre-M14 any-controller.
+                                        // A typed enum, NOT a bool (the historical
+                                        // space is not a clean binary and this
+                                        // leaves room without a later refactor).
+}
+
+LegendRuleScope {                       // RESEARCH §10: legend-rule controller scope
+    Modern,                             // CR 704.5j: per-controller + choice (post-2013-07 M14).
+                                        // DEFAULT — all four EC presets use this.
+    PreM14AnyController,                // pre-M14: same-named legends across ALL
+                                        // controllers all go to owners' graveyards,
+                                        // choiceless (Sixth-Edition "both die" form).
 }
 ```
+
+**Why `legend_rule_scope` is a general axis, not an EC-preset behavior.** RESEARCH
+§10 establishes the legend-rule scope change (Legends 1994 / pre-M14 = global,
+any-controller; M14 2013-07 = per-controller + choice) is a REAL functional
+difference — but **none of the four EC presets turn it on** (EC's published rules
+list mana burn / damage-on-stack / wish as their only legacy exceptions, never a
+legend-rule reversion), so all four set `LegendRuleScope::Modern`. It is included
+as a general historical-rules axis the engine can express for other era/custom
+formats — exactly the orthogonality Block Constructed proves for `mana_burn`
+(see the note below). Planeswalker uniqueness needs **no** flag: the four EC
+pools top out at Scourge (2003) and planeswalkers postdate that (Lorwyn 2007),
+so no EC-legal card is a planeswalker (RESEARCH §10c).
 
 **Where the payload lives.** `FormatConfig` gains
 `custom_rules: Option<CustomFormatRules>` (serde `#[serde(default,
@@ -209,6 +263,19 @@ custom formats don't use the external legality table). `sideboard_policy`,
 - **Damage uses the stack** (`damage_uses_stack`): LARGE (RESEARCH §6). Its own
   sub-project; likely out of MVP. Gated by the flag so Middle School / Classic
   are playable without it (with a documented fidelity caveat) until it lands.
+- **Legend-rule scope** (`legend_rule_scope`): SMALL (RESEARCH §10). The pre-M14
+  form is *simpler* than the modern one — global (group same-named legendaries
+  across all controllers, no `obj.controller == player_id` filter) and choiceless
+  (all members of a ≥2 group go to owners' graveyards, no `WaitingFor::ChooseLegend`),
+  which is exactly the shape of the existing `check_world_rule` (`sba.rs:1348`,
+  CR 704.5k). The change is one branch at the top of `check_legend_rule`
+  (`sba.rs:902`) selecting global-choiceless vs the current per-controller-choice
+  path based on the resolved `GameState.format_config` scope, reusing the shared
+  `move_sba_departing_permanent` mover (`sba.rs:618`) and the unchanged
+  `legend_rule_exempt_with_gate` filter (`sba.rs:880`). No new WaitingFor, no new
+  mover, no new state machine. **Not used by any of the four EC presets** (all
+  default to `Modern`); shipped as the general historical-rules axis. Annotate as
+  a legacy rule reverting the M14 change (cite CR 704.5j).
 
 ## 5. Frontend
 

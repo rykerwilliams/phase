@@ -72,6 +72,26 @@ do **not** hardcode four new `GameFormat` variants.
   points (RESEARCH.md §5). Mana burn is a localized addition at the mana-pool
   drop site. "Damage uses the stack" is a fundamental reversal of CR 510.2 and a
   deep combat/stack/priority rework.
+- **Legend-rule scope change is REAL and the engine is hardcoded to modern; a
+  legacy flag is SMALL — but no EC preset uses it.** Fully investigated
+  (RESEARCH.md §10). The legend rule (introduced by *Legends* 1994, legal in
+  93-94/95) was **global / any-controller** through 2013, then M14 (2013-07-13)
+  made it **per-controller + choice** (current CR 704.5j,
+  `MagicCompRules.txt:5510`). The engine's `check_legend_rule`
+  (`sba.rs:902-956`) is hardcoded to the modern per-controller-with-choice form
+  (loops per player, filters `controller == player_id`, pauses with
+  `WaitingFor::ChooseLegend`). Re-adding the pre-M14 global-choiceless form is
+  SMALL — it mirrors the existing `check_world_rule` (`sba.rs:1348`) shape and
+  reuses the shared SBA departure mover. Modeled as a typed
+  `LegendRuleScope { Modern, PreM14AnyController }` enum on `LegacyRuleSet` (not a
+  bool). **HONEST CAVEAT:** EC's published rulesets do **not** list a legend-rule
+  reversion (their only legacy exceptions are mana burn / damage-on-stack /
+  wish), so all four EC presets default to `Modern`; the scope enum ships as a
+  *general* historical-rules axis (like Block Constructed's `mana_burn`), not an
+  EC-preset behavior. Planeswalker uniqueness needs no flag — the four pools end
+  at Scourge (2003) and planeswalkers postdate that (Lorwyn 2007). The
+  planeswalker-uniqueness → legend-rule fold happened at **Ixalan (2017-09-28)**,
+  not Dominaria 2018.
 - **Pre-M10 Wish templating is small and is a REAL functional difference.**
   Fully investigated (RESEARCH.md §9). It reverts the M10 change that made exile
   an in-game zone (CR 400.11/400.11a): pre-M10, Wishes could retrieve an owned
@@ -108,6 +128,26 @@ do **not** hardcode four new `GameFormat` variants.
 - **Prior art**: `GameFormat::Limited` planning cycle, phase 53. Retrieved via
   `git show 80404a98b:.planning/phases/53-limited-draft-core/53-01-SUMMARY.md`.
   Summarized in RESEARCH.md §7 (Analogous Trace).
+
+## Relationship to adjacent work — scope boundaries (do NOT accommodate here)
+
+- **Vanguard (CR 902) is orthogonal to this design — do not entangle them.**
+  GitHub issue phase-rs/phase#5056 ("Implement the Vanguard variant (CR 902)")
+  requests Vanguard support; verified **still OPEN and unaddressed**
+  (`gh issue view 5056 --json state` → `"OPEN"`, 2026-07-07). Vanguard is
+  genuinely unimplemented (no `CoreType::Vanguard`, no `GameFormat::Vanguard`, no
+  Vanguard cards in `card-data.json`). Per the issue's own analysis, phase.rs
+  already implements **three of the four** CR "nontraditional card lives in the
+  command zone" casual variants — Planechase (CR 901, `game/planechase.rs`),
+  Commander (CR 903, `game/commander.rs`), Archenemy (CR 904, `game/archenemy.rs`)
+  — and Vanguard (CR 902) is "structurally the simplest of the four… a per-player,
+  game-long static modifier plus a command-zone ability source, which is a strict
+  subset of what archenemy.rs/planechase.rs already do." **Vanguard therefore
+  belongs to the existing command-zone-supplemental-card family, NOT to the
+  `CustomFormatDef`/`LegacyRuleSet` mechanism designed here.** The two are
+  independent: this custom-format engine neither depends on nor blocks Vanguard,
+  and this design does **not** need to accommodate it. Flagged so a reader does
+  not mistakenly try to fold Vanguard into the custom-format layer.
 
 ## Stretch goal (explicitly lower priority — do not design in depth)
 

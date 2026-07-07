@@ -249,6 +249,21 @@ do **not** hardcode four new `GameFormat` variants.
        design proposes `GameFormat::Custom` only for the *configuration*
        axis (legal sets, banned/restricted lists, era-rule toggles), not as
        a replacement for bespoke variants when a format needs new behavior.
+       **Dandan's own plan already argues for `SharedZones` as a reusable
+       building block** ("future shared-deck formats reuse the same
+       `SharedZones` descriptor"), and that generality is not hypothetical:
+       verified via WebSearch (`eternalcentral.com/type4`, plus a Riptide Lab
+       forum thread grouping "Cubelets, Dandân, and other shared deck
+       formats" together) that **Type 4** — a real, decades-old casual
+       format (unlimited mana, no lands, one spell/turn, chaos targeting,
+       last-player-standing) — has a documented variant where "all players
+       use the Type 4 card pool as a shared library," structurally the same
+       zone-sharing shape as Dandan. Type 4's *other* rules (infinite mana,
+       no lands) are unrelated to this design and out of scope, but it's a
+       second real, named format that would want the exact `SharedZones`/
+       `library_of`/`graveyard_of` building block Dandan's plan proposes —
+       reinforcing that it's worth building generally rather than
+       Dandan-specifically, consistent with "build for the class."
        Worth confirming the maintainer sees these as complementary, not
        competing, approaches.
     2. No technical overlap or conflict either way: Dandan's shared-zone

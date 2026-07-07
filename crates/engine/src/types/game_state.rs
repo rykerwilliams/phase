@@ -17,7 +17,7 @@ use super::ability::{
     TriggerDefinition,
 };
 use super::attribution::ObjectAttribution;
-use super::card::CardFace;
+use super::card::{CardFace, TokenImageRef};
 use super::card_type::{CoreType, Supertype};
 use super::counter::{counter_map_serde, CounterMatch, CounterType};
 use super::events::{GameEvent, PlayerActionKind};
@@ -196,6 +196,11 @@ pub struct CombatPhaseSkipState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LKISnapshot {
     pub name: String,
+    /// Display-only token catalog ref as it last existed in the public zone.
+    /// Preserved so stack entries from dead token sources can render the exact
+    /// token image without falling back to name-based lookup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_image_ref: Option<TokenImageRef>,
     pub power: Option<i32>,
     pub toughness: Option<i32>,
     /// CR 208.4b + CR 613.4b: Base power as it last existed in the public zone
@@ -985,6 +990,9 @@ pub struct PendingContinuation {
     pub chain: Box<ResolvedAbility>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent_kind: Option<EffectKind>,
+    /// CR 303.4f: Attach host captured before SearchChoice overwrites parent targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_attach_host: Option<AttachTarget>,
 }
 
 impl PendingContinuation {
@@ -995,6 +1003,7 @@ impl PendingContinuation {
         Self {
             chain,
             parent_kind: None,
+            search_attach_host: None,
         }
     }
 
@@ -1006,6 +1015,7 @@ impl PendingContinuation {
         Self {
             chain,
             parent_kind: Some(parent_kind),
+            search_attach_host: None,
         }
     }
 }
@@ -1196,6 +1206,9 @@ pub struct PendingChangeZoneIteration {
     /// carry-through pattern on this same struct.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enters_modified_if: Option<crate::types::ability::TargetFilter>,
+    /// CR 303.4f: Pre-resolved Aura host carried across a paused ChangeZone loop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enter_attached_to: Option<AttachTarget>,
     pub effect_kind: crate::types::ability::EffectKind,
 }
 
@@ -2644,12 +2657,42 @@ pub struct PendingBeginGameAbility {
     pub ability: ResolvedAbility,
 }
 
+/// CR 103.5b: Which declare-point action a pending `BottomCards` obligation
+/// will complete once resolved. `Keep` locks in the hand (CR 103.5); the
+/// player exits `pending`. `UseSerumPowder` runs the exile+redraw effect on
+/// the now-reduced hand and returns the entry to `Declare` (Serum Powder
+/// itself is not a mulligan — CR 103.5b + Serum Powder Oracle text).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum PendingMulliganAction {
+    Keep,
+    UseSerumPowder { object_id: ObjectId },
+}
+
+/// CR 103.5 + 103.5b: Per-entry sub-state for the declare-point mulligan
+/// flow. `Declare` is the default. `BottomCards` is entered the instant
+/// `Keep` or `UseSerumPowder` is declared with `count > 0` still owed
+/// against the per-player `prepaid_mulligan_bottoms` ledger; it must be
+/// resolved via `SelectCards` before the entry can advance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "type")]
+pub enum MulliganDecisionPhase {
+    #[default]
+    Declare,
+    BottomCards {
+        count: u8,
+        then: PendingMulliganAction,
+    },
+}
+
 /// CR 103.5: Per-player state during the simultaneous mulligan decision phase.
 /// One entry per player who has not yet declared "keep".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MulliganDecisionEntry {
     pub player: PlayerId,
     pub mulligan_count: u8,
+    #[serde(default)]
+    pub phase: MulliganDecisionPhase,
 }
 
 /// CR 103.5: Per-player state during the simultaneous bottom-cards phase.
@@ -3109,14 +3152,18 @@ pub enum WaitingFor {
     },
     /// CR 103.5 + 103.5b: London mulligan — each un-kept player decides
     /// simultaneously. The `pending` list holds every player who has not yet
-    /// chosen `MulliganChoice::Keep`, each with their current mulligan count.
-    /// Players act in any order; `Keep` removes the actor from `pending`,
-    /// `Mulligan` increments their count and redraws but keeps them in
-    /// `pending`, and `UseSerumPowder { object_id }` (CR 103.5b) exiles the
-    /// hand and redraws the same number without incrementing the count, also
-    /// keeping the player in `pending`. When `pending` is empty the flow
-    /// advances to `MulliganBottomCards` (if anyone owes bottoms) or
-    /// `finish_mulligans`.
+    /// finished the flow, each with their current mulligan count and a
+    /// per-entry `phase` (`MulliganDecisionPhase`). Players act in any order.
+    /// In `Declare`, `Keep`/`Mulligan`/`UseSerumPowder` apply as usual;
+    /// `Mulligan` increments the count, redraws, and resets that player's
+    /// bottoms ledger. Bottoming is folded into this same variant: at a
+    /// declare point (`Keep` or `UseSerumPowder`), if any bottoms are still
+    /// owed against `prepaid_mulligan_bottoms`, the entry transitions to
+    /// `BottomCards { count, then }` and the player resolves it with
+    /// `SelectCards { cards }` — this happens at that player's own declare
+    /// point, independent of every other player (CR 103.5b). When `pending`
+    /// empties, the flow advances directly to `finish_mulligans`; there is no
+    /// separate batch bottoms phase.
     ///
     /// CR 103.5d + CR 805.3a + CR 810.2: shared-team-turn mulligans are
     /// represented in the same simultaneous-decision model; every player
@@ -3129,13 +3176,6 @@ pub enum WaitingFor {
         /// Surfaced so display layers can render "Free Mulligan" labelling
         /// without re-deriving format/seat rules.
         free_first_mulligan: bool,
-    },
-    /// CR 103.5: After all players have kept, each player who mulliganed at
-    /// least once (and is not on the free-first discount) must put N cards on
-    /// the bottom of their library, where N = `count`. All such players choose
-    /// simultaneously and submit `SelectCards { cards }` in any order.
-    MulliganBottomCards {
-        pending: Vec<MulliganBottomEntry>,
     },
     /// TL:R 906.6a/e: A player with more than one Tiny Leader performs a
     /// forced first mulligan before any player may make a normal mulligan
@@ -4925,7 +4965,6 @@ impl WaitingFor {
         match self {
             WaitingFor::Priority { .. } => "Priority",
             WaitingFor::MulliganDecision { .. } => "MulliganDecision",
-            WaitingFor::MulliganBottomCards { .. } => "MulliganBottomCards",
             WaitingFor::OpeningHandBottomCards { .. } => "OpeningHandBottomCards",
             WaitingFor::ManaPayment { .. } => "ManaPayment",
             WaitingFor::ChooseXValue { .. } => "ChooseXValue",
@@ -5044,19 +5083,12 @@ impl WaitingFor {
     /// Extract the player who must act, if any.
     ///
     /// CR 103.5: For simultaneous-decision states (`MulliganDecision`,
-    /// `MulliganBottomCards`, `OpeningHandBottomCards`) this returns `Some(p)` only when exactly one
+    /// `OpeningHandBottomCards`) this returns `Some(p)` only when exactly one
     /// player is pending, and `None` when multiple are pending — callers
     /// that need set semantics must use [`Self::acting_players`] instead.
     pub fn acting_player(&self) -> Option<PlayerId> {
         match self {
             WaitingFor::MulliganDecision { pending, .. } => {
-                if pending.len() == 1 {
-                    Some(pending[0].player)
-                } else {
-                    None
-                }
-            }
-            WaitingFor::MulliganBottomCards { pending } => {
                 if pending.len() == 1 {
                     Some(pending[0].player)
                 } else {
@@ -5203,9 +5235,6 @@ impl WaitingFor {
     pub fn acting_players(&self) -> Vec<PlayerId> {
         match self {
             WaitingFor::MulliganDecision { pending, .. } => {
-                pending.iter().map(|e| e.player).collect()
-            }
-            WaitingFor::MulliganBottomCards { pending } => {
                 pending.iter().map(|e| e.player).collect()
             }
             WaitingFor::OpeningHandBottomCards { pending, .. } => {
@@ -6812,17 +6841,20 @@ pub struct GameState {
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub lands_tapped_for_mana: HashMap<PlayerId, Vec<ObjectId>>,
 
-    /// CR 103.5: Per-player locked-in mulligan count, populated as each player
-    /// declares "keep" during the simultaneous decision phase. Read by the
-    /// bottoms-phase builder to compute how many cards each player must put
-    /// on the bottom of their library. Cleared when the mulligan flow finishes.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub final_mulligan_counts: HashMap<PlayerId, u8>,
-
-    /// TL:R 906.6a: Per-player bottoms already paid by a forced opening-hand
-    /// mulligan before the normal mulligan-decision step. Subtracted from the
-    /// later London bottom count so the forced bottom is not charged twice.
-    /// Cleared with `final_mulligan_counts` when the mulligan flow finishes.
+    /// CR 103.5 + 103.5b: Per-player ledger of bottom cards already put on the
+    /// bottom of the library toward the current mulligan obligation. This is
+    /// the single source of truth for "how many bottoms has this player
+    /// already paid at their current mulligan count". Discipline:
+    /// - Reset to 0 on every `MulliganChoice::Mulligan` — a fresh redraw
+    ///   invalidates any prior credit (the obligation for the new count starts
+    ///   from scratch, CR 103.5).
+    /// - Accumulated (never reset) across repeated `UseSerumPowder` uses at the
+    ///   same mulligan count, so cycling Serum Powder never double-charges an
+    ///   already-paid obligation (CR 103.5b + Serum Powder Oracle text).
+    /// - Also credited by the Tiny Leaders forced opening-hand bottom
+    ///   (TL:R 906.6a) so that first bottom is not charged twice.
+    ///
+    /// Cleared when the mulligan flow finishes (all players out of `pending`).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub prepaid_mulligan_bottoms: HashMap<PlayerId, u8>,
 
@@ -7315,6 +7347,10 @@ pub struct GameState {
     // fires at the tail of its resolver.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_continuation: Option<PendingContinuation>,
+
+    /// CR 303.4f: Attach host captured before SearchChoice replaces parent targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_continuation_attach_host: Option<AttachTarget>,
 
     /// CR 609.3 + CR 109.5: Pending `repeat_for` iteration loop paused mid-flight
     /// because the inner effect entered an interactive `WaitingFor` state.
@@ -8566,7 +8602,6 @@ impl GameState {
             auto_pass: HashMap::new(),
             phase_stops: HashMap::new(),
             lands_tapped_for_mana: HashMap::new(),
-            final_mulligan_counts: HashMap::new(),
             prepaid_mulligan_bottoms: HashMap::new(),
             match_config: MatchConfig::default(),
             match_phase: MatchPhase::InGame,
@@ -8641,6 +8676,7 @@ impl GameState {
             revealed_cards: HashSet::new(),
             public_revealed_cards: HashSet::new(),
             pending_continuation: None,
+            search_continuation_attach_host: None,
             pending_repeat_iteration: None,
             pending_repeated_optional_payment: None,
             pending_change_zone_iteration: None,
@@ -10071,14 +10107,33 @@ mod tests {
             pending: vec![MulliganDecisionEntry {
                 player: PlayerId(0),
                 mulligan_count: 1,
+                phase: MulliganDecisionPhase::Declare,
             }],
             free_first_mulligan: false,
         }));
-        variants.push(Box::new(WaitingFor::MulliganBottomCards {
-            pending: vec![MulliganBottomEntry {
+        variants.push(Box::new(WaitingFor::MulliganDecision {
+            pending: vec![MulliganDecisionEntry {
                 player: PlayerId(0),
-                count: 2,
+                mulligan_count: 1,
+                phase: MulliganDecisionPhase::BottomCards {
+                    count: 1,
+                    then: PendingMulliganAction::Keep,
+                },
             }],
+            free_first_mulligan: false,
+        }));
+        variants.push(Box::new(WaitingFor::MulliganDecision {
+            pending: vec![MulliganDecisionEntry {
+                player: PlayerId(0),
+                mulligan_count: 2,
+                phase: MulliganDecisionPhase::BottomCards {
+                    count: 2,
+                    then: PendingMulliganAction::UseSerumPowder {
+                        object_id: ObjectId(7),
+                    },
+                },
+            }],
+            free_first_mulligan: false,
         }));
         variants.push(Box::new(WaitingFor::OpeningHandBottomCards {
             pending: vec![MulliganBottomEntry {
@@ -10353,7 +10408,7 @@ mod tests {
             mana_reduction: ManaCost::zero(),
             pending_cast: dummy_pending(),
         }));
-        assert_eq!(variants.len(), 33);
+        assert_eq!(variants.len(), 34);
     }
 
     #[test]
@@ -10690,6 +10745,7 @@ mod tests {
             library_placement: None,
             effect_kind: crate::types::ability::EffectKind::ChangeZone,
             enters_modified_if: None,
+            enter_attached_to: None,
         };
         let json = serde_json::to_string(&original).expect("serialize");
         // Modern shape must be emitted, NOT the legacy bool field.

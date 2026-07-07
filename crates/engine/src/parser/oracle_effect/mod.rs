@@ -146,7 +146,7 @@ use self::subject::{
     try_parse_subject_predicate_ast, try_parse_targeted_controller_gain_life,
 };
 use crate::parser::oracle_ir::ast::*;
-pub(crate) use crate::parser::oracle_ir::context::ParseContext;
+pub(crate) use crate::parser::oracle_ir::context::{ParseContext, TokenPtFollowup};
 use crate::parser::oracle_ir::effect_chain::{ClauseIr, EffectChainIr, SpecialClause};
 use crate::types::mana::ManaExpiry;
 
@@ -4311,6 +4311,21 @@ fn try_parse_create_token_sequence(
     Some(clause)
 }
 
+fn token_source_pt_followup_can_apply_to_chunk(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let tp = TextPair::new(text, &lower);
+    let Some(((), after_create_original)) = nom_on_lower(tp.original, tp.lower, |i| {
+        value((), tag("create ")).parse(i)
+    }) else {
+        return false;
+    };
+    let consumed = tp.original.len() - after_create_original.len();
+    let after_create = TextPair::new(after_create_original, &tp.lower[consumed..]);
+    split_create_token_sequence(after_create).is_none()
+        && !split_choice_list_items(after_create.original.trim().trim_end_matches('.'))
+            .is_some_and(|items| items.len() >= 2)
+}
+
 /// Split a conjunctive create-ALL token list into its item slices `(orig, lower)`.
 ///
 /// CR 608.2c: "create A, B, and C" is a do-ALL instruction in written order. The
@@ -5673,9 +5688,15 @@ fn unless_rider_defers_to_body_parser(text: &str) -> bool {
     let after_trimmed = after_unless.trim_end_matches('.').trim();
 
     // CR 605.1a: activation prohibition mana-ability exemption (restriction.rs).
-    if tag::<_, _, OracleError<'_>>("they're mana abilities")
-        .parse(after_trimmed)
-        .is_ok()
+    // Dual-apostrophe: MTGJSON oracle text uses the U+2019 glyph, and this guard
+    // must recognize it so the restriction parser (not the unsupported-unless
+    // fallback) handles "…can't be activated unless they're mana abilities".
+    if alt((
+        tag::<_, _, OracleError<'_>>("they're mana abilities"),
+        tag("they\u{2019}re mana abilities"),
+    ))
+    .parse(after_trimmed)
+    .is_ok()
     {
         return true;
     }
@@ -5843,6 +5864,20 @@ pub(crate) fn parse_effect_clause(text: &str, ctx: &mut ParseContext) -> ParsedE
         if let Some(mut clause) =
             try_parse_additional_land_this_turn(TextPair::new(text, &original_lower))
         {
+            if clause.condition.is_none() {
+                clause.condition = peel_ctx.condition().cloned().or(unless_condition.clone());
+            }
+            return attach_unless_slots(clause, None, unless_pay_deferred);
+        }
+        // CR 614.1d + CR 514.2: "Permanents enter tapped this turn." / "Lands you
+        // control enter tapped this turn." — a turn-bound floating enters-tapped
+        // replacement (Due Respect, Nahiri's Lithoforming).
+        if let Some(effect) = try_parse_enter_tapped_set_this_turn(
+            TextPair::new(text, &original_lower),
+            ctx.card_name.as_deref().unwrap_or(""),
+        ) {
+            let mut clause = parsed_clause(effect);
+            peel_ctx.apply_optional(&mut clause.optional);
             if clause.condition.is_none() {
                 clause.condition = peel_ctx.condition().cloned().or(unless_condition.clone());
             }
@@ -11043,6 +11078,57 @@ fn try_parse_additional_land_this_turn(tp: TextPair) -> Option<ParsedEffectClaus
     Some(clause)
 }
 
+/// CR 614.1d + CR 514.2 + CR 611.2a: Lift a turn-duration "enter tapped this
+/// turn" clause into a floating end-of-turn replacement. Covers Due Respect
+/// ("Permanents enter tapped this turn.") and Nahiri's Lithoforming ("Lands you
+/// control enter tapped this turn."), whose enter-tapped clause otherwise lands
+/// in `Effect::Unimplemented`.
+///
+/// The trailing "this turn" (CR 514.2) is stripped first to bind the effect's
+/// lifetime, and the bare body is handed to the replacement parser — the parser
+/// IS the detector, no string dispatch. Only the unconditional external
+/// "[type] enter tapped" class (Authority of the Consuls shape: `event ==
+/// ChangeZone`, `execute == SetTapState{Tap|Untap}` on SelfRef, CR 614.1d) is
+/// lifted; any other replacement shape returns `None` so the body falls through
+/// to the existing dispatch. The def is emitted as an
+/// `AddTargetReplacement { target: None }` (CR 611.2a: a resolution-fixed
+/// continuous effect) so the resolver installs it globally and anchors
+/// `source_controller` to `ability.controller` — required for Nahiri's
+/// controller-relative "Lands you control" `valid_card` filter.
+fn try_parse_enter_tapped_set_this_turn(tp: TextPair<'_>, card_name: &str) -> Option<Effect> {
+    // CR 514.2: the trailing "this turn" is the effect duration, not part of the
+    // replacement body. Fail closed on any other (or absent) trailing duration.
+    let (body, dur) = strip_trailing_duration(tp.original);
+    if dur != Some(Duration::UntilEndOfTurn) {
+        return None;
+    }
+    // The replacement parser is the detector: it recognizes "[type] enter
+    // tapped" and yields the ChangeZone def with a SelfRef tap execute.
+    let mut def = super::oracle_replacement::parse_replacement_line(body, card_name)?;
+    // Shape guard (CR 614.1d): only the enters-tapped external-replacement class
+    // is a valid turn-bound lift. Match through the `Option<Box<AbilityDefinition>>`
+    // wrapper to the execute's effect; a SelfRef tap/untap is exactly that class,
+    // and any other shape (zone redirects, counter riders, …) is out of scope.
+    let is_enter_tapped = def.event == ReplacementEvent::ChangeZone
+        && matches!(
+            def.execute.as_ref().map(|ability| &*ability.effect),
+            Some(Effect::SetTapState {
+                state: TapStateChange::Tap | TapStateChange::Untap,
+                ..
+            })
+        );
+    if !is_enter_tapped {
+        return None;
+    }
+    // CR 514.2: expire at this turn's cleanup. `source_controller` is left `None`
+    // here — the resolver anchors it to `ability.controller` at install time.
+    def.expiry = Some(RestrictionExpiry::EndOfTurn);
+    Some(Effect::AddTargetReplacement {
+        replacement: Box::new(def),
+        target: TargetFilter::None,
+    })
+}
+
 fn clause_is_additional_land_permission(clause: &ParsedEffectClause) -> bool {
     matches!(
         &clause.effect,
@@ -14625,6 +14711,58 @@ fn parse_bare_damage_continuation<'a>(
             "",
         ));
     }
+    // CR 120.2b + CR 120.3: A chained continuation whose recipient is an
+    // "each <object>" scope — e.g. "... and 1 damage to each creature your
+    // opponents control" — is uniform mass damage to every matching permanent,
+    // not a single targeted hit. The primary segment already classifies this in
+    // `try_parse_damage_with_remainder`; the bare-continuation path must do the
+    // same or it emits a single-target `DealDamage` that would (illegally)
+    // require one legal target and mark damage on only one creature. Affects the
+    // second segment of Dagger Caster, Seismic Wave, Wildfire Howl (gift half),
+    // The Fall of Kroog, and Radiating Lightning. Excluded via `each of ` guard:
+    // the "each of up to N target(s)" distribute form (Drakuseth), which is a
+    // targeted multi-hit owned by the primary distribute path, not mass damage.
+    if tag::<_, _, OracleError<'_>>("each ")
+        .parse(after_to)
+        .is_ok()
+        && tag::<_, _, OracleError<'_>>("each of ")
+            .parse(after_to)
+            .is_err()
+    {
+        // "each player" / "each opponent" / "each foe" → per-player damage,
+        // which may vary per recipient (`DamageEachPlayer`, CR 120.3a).
+        if let Some(player_filter) = lower::parse_damage_each_player_scope(after_to) {
+            return Some((
+                Effect::DamageEachPlayer {
+                    amount,
+                    player_filter,
+                },
+                "",
+            ));
+        }
+        // "each <object filter>" → uniform mass object damage (`DamageAll`). A
+        // trailing "and each <player>" composite scope is lifted into
+        // `player_filter`, mirroring the primary each-branch classification.
+        let (target, rem) = parse_target_with_ctx(after_to, ctx);
+        let (target, rem) = refine_damage_target_remainder(target, rem);
+        let rem = trim_dangling_target_word(rem);
+        let trimmed_rem = rem.trim_start_matches([',', ' ']);
+        let trimmed_rem_lower = trimmed_rem.to_lowercase();
+        let player_filter = tag::<_, _, OracleError<'_>>("and ")
+            .parse(trimmed_rem_lower.as_str())
+            .ok()
+            .and_then(|(after_and, _)| lower::parse_damage_each_player_scope(after_and));
+        let rem_out = if player_filter.is_some() { "" } else { rem };
+        return Some((
+            Effect::DamageAll {
+                amount,
+                target,
+                player_filter,
+                damage_source: None,
+            },
+            rem_out,
+        ));
+    }
     let (target, rem) = parse_target_with_ctx(after_to, ctx);
     let (target, rem) = refine_damage_target_remainder(target, rem);
     let rem = trim_dangling_target_word(rem);
@@ -16837,11 +16975,15 @@ fn apply_anchor_subject(effect: &mut Effect, anchor: &TargetFilter) {
         Effect::ChangeZoneAll { target, .. } if *target == TargetFilter::Controller => {
             *target = anchor.clone();
         }
-        // CR 608.2c + CR 121.1: "That player shuffles, then draws a card for
-        // each card exiled from their hand this way" (The End, Deadly Cover-Up,
-        // Test of Talents) — the trailing Draw defaults its target to the caster
-        // (`Controller`) but must draw for the SEARCHED player carried on the
-        // anchor. Mirrors the `Shuffle` arm above (same caster-default set).
+        // CR 608.2c: a trailing "…, then draws …" continuation is a separate
+        // chunk with no subject of its own, so it defaults its target to the
+        // caster (`Controller`); inherit the earlier player anchor so the acting
+        // player — not the source's controller — draws. Covers "That player
+        // shuffles, then draws a card for each card exiled from their hand this
+        // way" (The End, Deadly Cover-Up, Test of Talents; CR 121.1) and "that
+        // player puts the cards in their hand on the bottom of their library …,
+        // then draws that many cards" (Teferi's Puzzle Box, #4241; CR 102.1).
+        // Mirrors the `Shuffle` arm above (same caster-default set).
         Effect::Draw { target, .. }
             if matches!(
                 *target,
@@ -16853,6 +16995,42 @@ fn apply_anchor_subject(effect: &mut Effect, anchor: &TargetFilter) {
             *target = anchor.clone();
         }
         _ => {}
+    }
+}
+
+fn apply_anchor_subject_to_clause(
+    clause: &mut ParsedEffectClause,
+    anchor: &TargetFilter,
+    text_lower: &str,
+) {
+    apply_their_library_reveal_anchor(&mut clause.effect, anchor, text_lower);
+    apply_anchor_subject(&mut clause.effect, anchor);
+    let mut sub = clause.sub_ability.as_deref_mut();
+    while let Some(def) = sub {
+        apply_their_library_reveal_anchor(def.effect.as_mut(), anchor, text_lower);
+        apply_anchor_subject(def.effect.as_mut(), anchor);
+        sub = def.sub_ability.as_deref_mut();
+    }
+}
+
+/// CR 608.2c: A subjectless reveal continuation that explicitly says
+/// "their library" inherits the prior non-caster player anchor. Do not apply
+/// this to "your library": `RevealTop { Controller }` cannot otherwise
+/// distinguish an explicit caster possessive from an implicit default.
+fn apply_their_library_reveal_anchor(effect: &mut Effect, anchor: &TargetFilter, text_lower: &str) {
+    if !scan_contains_phrase(text_lower, "their library")
+        || !target_filter_can_target_player(anchor)
+    {
+        return;
+    }
+    let Effect::RevealTop { player, .. } = effect else {
+        return;
+    };
+    if matches!(
+        *player,
+        TargetFilter::Controller | TargetFilter::Player | TargetFilter::ParentTargetController
+    ) {
+        *player = anchor.clone();
     }
 }
 
@@ -16893,7 +17071,7 @@ fn player_filter_as_controller_ref(filter: &TargetFilter) -> Option<ControllerRe
     }
 }
 
-fn target_filter_controller_ref(filter: &TargetFilter) -> Option<ControllerRef> {
+pub(crate) fn target_filter_controller_ref(filter: &TargetFilter) -> Option<ControllerRef> {
     match filter {
         TargetFilter::Typed(tf) => tf.controller.clone(),
         TargetFilter::Or { filters } | TargetFilter::And { filters } => {
@@ -16901,6 +17079,27 @@ fn target_filter_controller_ref(filter: &TargetFilter) -> Option<ControllerRef> 
         }
         TargetFilter::Not { filter } => target_filter_controller_ref(filter),
         _ => None,
+    }
+}
+
+/// Mutating sibling of [`target_filter_controller_ref`]: recursively rewrite the
+/// `controller` of every `Typed` node reachable through `And`/`Or`/`Not` to
+/// `controller`. Used by the Siren's Call card-assembly pass to bind the delayed
+/// punisher's "that player controls" anaphor to the active player named by the
+/// sibling coerce clause.
+pub(crate) fn set_target_filter_controller_ref(
+    filter: &mut TargetFilter,
+    controller: ControllerRef,
+) {
+    match filter {
+        TargetFilter::Typed(tf) => tf.controller = Some(controller),
+        TargetFilter::Or { filters } | TargetFilter::And { filters } => {
+            for inner in filters.iter_mut() {
+                set_target_filter_controller_ref(inner, controller.clone());
+            }
+        }
+        TargetFilter::Not { filter } => set_target_filter_controller_ref(filter, controller),
+        _ => {}
     }
 }
 
@@ -20442,6 +20641,7 @@ fn is_exile_effect(effect: &Effect) -> bool {
 fn publishes_tracked_set_from_resolution(effect: &Effect) -> bool {
     is_exile_effect(effect)
         || is_token_creating_effect(effect)
+        || is_mass_coerce_static(effect)
         || matches!(
             effect,
             Effect::PutCounter { .. }
@@ -20449,6 +20649,49 @@ fn publishes_tracked_set_from_resolution(effect: &Effect) -> bool {
                 | Effect::MultiplyCounter { .. }
                 | Effect::MoveCounters { .. }
         )
+}
+
+/// CR 508.1a + CR 508.1d + CR 608.2c: A mass "attack this turn if able" coercion —
+/// a `GenericEffect` carrying a `MustAttack` (CR 508.1a, attack-if-able) or
+/// `MustAttackPlayer` (CR 508.1d, directed attack) static over a BROADCAST
+/// population (not `SelfRef` and not an inherited-target reference) — identifies
+/// "those creatures" at resolution. When a following "those creatures" clause
+/// reads that frozen population (Maddening Imp), the coerce is the producer that
+/// snapshots it (CR 608.2c: "those creatures" is a frozen reference to the objects
+/// identified when the ability resolved). A `SelfRef`/inherited-target coerce
+/// names a single specific object, not a population, so it does not publish a set.
+fn is_mass_coerce_static(effect: &Effect) -> bool {
+    let Effect::GenericEffect {
+        static_abilities,
+        target,
+        ..
+    } = effect
+    else {
+        return false;
+    };
+    static_abilities.iter().any(|static_def| {
+        matches!(
+            static_def.mode,
+            StaticMode::MustAttack | StaticMode::MustAttackPlayer { .. }
+        ) && target
+            .as_ref()
+            .or(static_def.affected.as_ref())
+            .is_some_and(is_broadcast_population_filter)
+    })
+}
+
+/// CR 608.2c: A "broadcast" filter names a population to enumerate at resolution,
+/// as opposed to an inherited-reference filter (`TriggeringSource` / `ParentTarget`
+/// / `CostPaidObject`) or a self-reference (`SelfRef`), which name a single
+/// specific object. Only a broadcast population is snapshotted as "those creatures".
+fn is_broadcast_population_filter(filter: &TargetFilter) -> bool {
+    !matches!(
+        filter,
+        TargetFilter::TriggeringSource
+            | TargetFilter::ParentTarget
+            | TargetFilter::CostPaidObject
+            | TargetFilter::SelfRef
+    )
 }
 
 /// CR 603.7: Detect explicit cross-clause pronouns ("those cards", "the exiled card").
@@ -22419,6 +22662,7 @@ pub fn parse_effect_chain(text: &str, kind: AbilityKind) -> AbilityDefinition {
     let ir = parse_effect_chain_ir(text, kind, &mut ParseContext::default());
     let mut def = lower_effect_chain_ir(&ir);
     finalize_effect_chain(&mut def);
+    apply_owner_library_reveal_anchor_from_text(&mut def, text);
     def
 }
 
@@ -22460,6 +22704,7 @@ pub(crate) fn parse_effect_chain_with_context(
     let ir = parse_effect_chain_ir(text, kind, ctx);
     let mut def = lower_effect_chain_ir(&ir);
     finalize_effect_chain(&mut def);
+    apply_owner_library_reveal_anchor_from_text(&mut def, text);
     def
 }
 
@@ -22556,6 +22801,44 @@ pub(crate) fn finalize_effect_chain(def: &mut AbilityDefinition) {
     fold_speed_floor_sentences(def);
     rewrite_choose_tracked_set_exclusion(def);
     fold_additional_combat_attacker_restriction(def);
+}
+
+fn apply_owner_library_reveal_anchor_from_text(def: &mut AbilityDefinition, text: &str) {
+    let lower = text.to_lowercase();
+    if !scan_contains_phrase(&lower, "shuffles it into their library")
+        || !scan_contains_phrase(&lower, "reveals the top card of their library")
+        || scan_contains_phrase(&lower, "reveals the top card of your library")
+    {
+        return;
+    }
+
+    // CR 108.3 + CR 400.3 + CR 608.2c: after an owner's-library shuffle,
+    // a following "their library" reveal refers to that same owner. The
+    // generic reveal parser defaults subjectless reveals to the controller, so
+    // repair only the owner-shuffle chain and leave explicit "your library"
+    // reveals untouched.
+    let mut saw_owner_shuffle = false;
+    let mut current = Some(def);
+    while let Some(node) = current {
+        match node.effect.as_mut() {
+            Effect::Shuffle { target } if *target == TargetFilter::ParentTargetOwner => {
+                saw_owner_shuffle = true;
+            }
+            Effect::RevealTop { player, .. }
+                if saw_owner_shuffle
+                    && matches!(
+                        *player,
+                        TargetFilter::Controller
+                            | TargetFilter::Player
+                            | TargetFilter::ParentTargetController
+                    ) =>
+            {
+                *player = TargetFilter::ParentTargetOwner;
+            }
+            _ => {}
+        }
+        current = node.sub_ability.as_deref_mut();
+    }
 }
 
 /// CR 509.1g + CR 506.3e + CR 707.2 + CR 603.7: Mirror Match's whole-card idiom
@@ -24933,6 +25216,14 @@ pub(crate) fn parse_effect_chain_ir(
                 Some(ControllerRef::ParentTargetController)
             )
             && chain_parent_target_controller_scope.is_some();
+        let token_pt_followup = chunks
+            .get(chunk_idx + 1)
+            .filter(|_| token_source_pt_followup_can_apply_to_chunk(normalized_text))
+            .and_then(|next| {
+                let next_text = strip_leading_sequence_connector(&next.text).trim();
+                sequence::parse_token_source_power_toughness_followup(next_text)
+            })
+            .map(|(power, toughness)| TokenPtFollowup::PowerToughness { power, toughness });
         let mut chunk_ctx = ParseContext {
             subject: chunk_subject,
             card_name: ctx.card_name.clone(),
@@ -25008,6 +25299,7 @@ pub(crate) fn parse_effect_chain_ir(
             // that many tokens" chunk needs it to back-reference the cast spell's
             // colored-pip count instead of the generic EventContextAmount.
             pending_mana_symbol_count_color: ctx.pending_mana_symbol_count_color,
+            token_pt_followup,
             // CR 603.1 + CR 608.2c: trigger-body chunk parsing must preserve
             // trigger context so non-target event anaphors ("that permanent or
             // player" on Ghyrson) bind to the triggering event instead of being
@@ -25487,7 +25779,8 @@ pub(crate) fn parse_effect_chain_ir(
             anchor_subject = None;
         }
         if let Some(ref anchor) = anchor_subject {
-            apply_anchor_subject(&mut clause.effect, anchor);
+            let text_lower_for_anchor = text.to_lowercase();
+            apply_anchor_subject_to_clause(&mut clause, anchor, &text_lower_for_anchor);
         }
 
         // Update anchor from this clause's subject (e.g., SearchLibrary.target_player
@@ -25497,6 +25790,10 @@ pub(crate) fn parse_effect_chain_ir(
         // ParentTargetOwner anchor for a following villainous-choice clause.
         if let Some(extracted) = extract_player_anchor_in_chain(&clause) {
             anchor_subject = Some(extracted);
+            if let Some(ref anchor) = anchor_subject {
+                let text_lower_for_anchor = text.to_lowercase();
+                apply_anchor_subject_to_clause(&mut clause, anchor, &text_lower_for_anchor);
+            }
         }
 
         // Anaphoric resolution: parse-time pronoun→parent-target rewrites.
@@ -27917,7 +28214,7 @@ fn issue_2403_sin_spira_tracked_set_copy_after_random_exile() {
 #[test]
 fn issue_2406_chaos_warp_owner_library_shuffle_and_reveal() {
     let def = parse_effect_chain(
-        "The owner of target permanent shuffles it into their library, then reveals the top card of that library. If it's a permanent card, they put it onto the battlefield.",
+        "The owner of target permanent shuffles it into their library, then reveals the top card of their library. If it's a permanent card, they put it onto the battlefield.",
         AbilityKind::Spell,
     );
     let Effect::ChangeZone {
@@ -27942,6 +28239,25 @@ fn issue_2406_chaos_warp_owner_library_shuffle_and_reveal() {
         panic!("expected RevealTop of owner's library, got {reveal:?}");
     };
     assert_eq!(*player, TargetFilter::ParentTargetOwner);
+}
+
+#[test]
+fn owner_anchor_does_not_rewrite_explicit_your_library_reveal() {
+    let def = parse_effect_chain(
+        "The owner of target permanent shuffles it into their library, then reveals the top card of your library.",
+        AbilityKind::Spell,
+    );
+    let shuffle = def.sub_ability.as_ref().expect("shuffle sub");
+    let reveal = shuffle
+        .sub_ability
+        .as_ref()
+        .expect("reveal sub")
+        .effect
+        .as_ref();
+    let Effect::RevealTop { player, count: 1 } = reveal else {
+        panic!("expected RevealTop of your library, got {reveal:?}");
+    };
+    assert_eq!(*player, TargetFilter::Controller);
 }
 
 #[test]

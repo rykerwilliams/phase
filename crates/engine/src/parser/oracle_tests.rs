@@ -1331,6 +1331,7 @@ fn oracle_face_for(
             scryfall_id: Some(format!("{}-face", name.to_lowercase())),
         },
         foreign_data: Vec::new(),
+        related_cards: crate::database::mtgjson::SetRelatedCards::default(),
     };
     crate::database::synthesis::build_oracle_face(&card, None)
 }
@@ -1844,6 +1845,7 @@ fn pupu_ufo_full_card_supported_dynamic_base_power() {
                 scryfall_id: Some("pupu-ufo-face".to_string()),
             },
             foreign_data: Vec::new(),
+            related_cards: crate::database::mtgjson::SetRelatedCards::default(),
         };
     let face = crate::database::synthesis::build_oracle_face(&card, None);
     let gaps = crate::game::coverage::card_face_gaps(&face);
@@ -1894,6 +1896,7 @@ fn sita_varma_full_card_supported_inverted_genitive_base_pt() {
                 scryfall_id: Some("sita-varma-face".to_string()),
             },
             foreign_data: Vec::new(),
+            related_cards: crate::database::mtgjson::SetRelatedCards::default(),
         };
     let face = crate::database::synthesis::build_oracle_face(&card, None);
     let gaps = crate::game::coverage::card_face_gaps(&face);
@@ -8940,6 +8943,67 @@ fn spell_temporal_whenever_line_builds_delayed_trigger() {
     assert_eq!(trigger.valid_target, Some(TargetFilter::Controller));
     assert!(trigger.valid_card.is_some());
     assert!(r.parse_warnings.is_empty());
+}
+
+#[test]
+fn enchanted_player_cast_trigger_scopes_caster_to_enchanted_player() {
+    // CR 303.4m + CR 702.5a: Maddening Hex — "Whenever enchanted player casts a
+    // noncreature spell, ..." must fire ONLY for the enchanted player's casts
+    // ("enchanted player" = the Aura's attached player, CR 303.4m).
+    // Before the fix the caster filter stayed unset (any player), so the trigger
+    // over-fired on every player's noncreature spell (issue #5288). The enchanted
+    // player is the Aura's attached player, so the caster scopes to `AttachedTo`.
+    let r = parse(
+        "Enchant player\n\
+         Whenever enchanted player casts a noncreature spell, you draw a card.",
+        "Maddening Hex Test",
+        &[],
+        &["Enchantment"],
+        &["Aura"],
+    );
+    let trigger = r
+        .triggers
+        .iter()
+        .find(|t| t.mode == TriggerMode::SpellCast)
+        .expect("expected a SpellCast trigger");
+    assert_eq!(
+        trigger.valid_target,
+        Some(TargetFilter::AttachedTo),
+        "enchanted-player cast trigger must scope the caster to the enchanted player: {:?}",
+        trigger.valid_target
+    );
+    // The noncreature-spell restriction is preserved on the spell object.
+    assert!(
+        trigger.valid_card.is_some(),
+        "noncreature spell restriction must remain set"
+    );
+}
+
+#[test]
+fn opponent_cast_trigger_still_scopes_to_opponent_not_attached_to() {
+    // Regression for the enchanted-player fix: an "an opponent casts ..." cast
+    // trigger must keep its opponent-controller caster scope and NOT collapse to
+    // AttachedTo.
+    let r = parse(
+        "Whenever an opponent casts a noncreature spell, you draw a card.",
+        "Opponent Cast Test",
+        &[],
+        &["Enchantment"],
+        &[],
+    );
+    let trigger = r
+        .triggers
+        .iter()
+        .find(|t| t.mode == TriggerMode::SpellCast)
+        .expect("expected a SpellCast trigger");
+    assert_eq!(
+        trigger.valid_target,
+        Some(TargetFilter::Typed(
+            TypedFilter::default().controller(ControllerRef::Opponent)
+        )),
+        "opponent cast trigger must stay opponent-scoped: {:?}",
+        trigger.valid_target
+    );
 }
 
 #[test]

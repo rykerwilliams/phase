@@ -1767,6 +1767,7 @@ fn scan_quantity_ref(x: &QuantityRef) -> Axes {
             projected: false,
         },
         QuantityRef::DistinctCardTypes { .. } => Axes::CONSERVATIVE,
+        QuantityRef::DistinctSubtypes { .. } => Axes::CONSERVATIVE,
         QuantityRef::CardsExiledBySource => Axes::NONE,
         QuantityRef::ExiledCardPower { index: _ } => Axes::NONE,
         QuantityRef::ZoneCardCount {
@@ -3292,6 +3293,8 @@ fn scan_controller_ref(x: &ControllerRef) -> Axes {
             projected: false,
         },
         ControllerRef::EnchantedPlayer => Axes::NONE,
+        // CR 102.1: a live read of `state.active_player` — no event/sibling axis.
+        ControllerRef::ActivePlayer => Axes::NONE,
     }
 }
 

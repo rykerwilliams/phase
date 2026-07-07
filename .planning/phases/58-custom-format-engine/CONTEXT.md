@@ -119,6 +119,24 @@ do **not** hardcode four new `GameFormat` variants.
    (Jan 1 / Jul 1). Bundled-preset data is version-controlled, so updates are
    ordinary edits — but whether we want a dated/versioned banlist history is
    open.
+4. **Draw/tiebreaker resolution mechanics** (generalizing the Chaos Orb
+   tiebreaker and the foreign-card-identification convention above): both are
+   instances of a "how does this table resolve an otherwise-undecided
+   outcome" hook, not an in-game rule. Confirmed via grep (`crates/draft-core`,
+   `server-core`) that phase.rs has **no match-level concept at all today** —
+   no best-of-N, no tournament round, no draw/tiebreak state machine; the
+   engine models single games only. So this genuinely has two different
+   shapes depending on a product decision this doc should not make
+   unilaterally: (a) a **tournament-level policy** ("draws are not permitted;
+   play resolves until decided," which needs no new state, since it's just a
+   procedural rule about what happens after a game/match ends) or (b) a
+   **per-format-configurable "how to decide a draw" hook**, which would
+   require inventing a match/round concept above the single-game engine
+   first — a materially larger scope than this custom-format engine. Given
+   no match-level structure exists, this is flagged as **out of scope for
+   the custom-format engine itself** and, if ever pursued, belongs to a
+   separate, later "tournament/match structure" design, not bundled into
+   `CustomFormatDef`/`LegacyRuleSet` here.
 
 ## Source data
 
@@ -222,9 +240,19 @@ things under overlapping branding:
     do not add a `LegacyRuleSet` field for this without first verifying the
     actual historical rule via an authoritative source, per this project's
     "verify before annotating" discipline.
-  - **"Draws determined by foreign card identification"** — meaning
-    genuinely unclear; not investigated, not designed, flagged as an open
-    question rather than guessed at.
+  - **"Draws determined by foreign card identification"** — resolved via
+    direct user explanation (not independently re-verified against an
+    external source, per this doc's provenance discipline): each player
+    shows their opponent an obscure card printed in a non-English language;
+    the cards are shown back and forth, and the first player to fail to
+    correctly identify/name the shown card loses. This reads as a
+    paper-tournament social/anti-counterfeiting convention — a
+    knowledge-based substitute for a coin flip or the Chaos Orb tiebreaker
+    (see the EC "tied match" ruling above), not an in-game rule. It has no
+    engine-relevant behavior: phase.rs already needs its own standard
+    mechanism for resolving "who plays first" / breaking ties, and this is
+    simply how humans did that at the table in an old-school paper-Magic
+    setting. **No `LegacyRuleSet` flag needed for this.**
   - "Current Oracle on all cards" and "Reprints OK" — policy statements
     about which printing/wording to use, not engine-modelable rules deltas;
     same category as the already-noted reprint-fidelity open question
@@ -241,3 +269,14 @@ things under overlapping branding:
   sideboard from opened packs, and a pre-match "Gentleman's Agreement" banlist.
   Depends on 93-94 already existing **plus** a genuinely new in-match
   pack-opening mechanic. Sequenced last; see PLAN.md §8.
+  **Confirmed via WebSearch:** this in-match pack-opening mechanic is,
+  structurally, exactly what the real card **Booster Tutor** (Unhinged;
+  Oracle: "Open a sealed Magic booster pack, reveal the cards, and put one
+  of them into your hand.") needs — open-a-pack, reveal, pick-one-to-hand.
+  Whichever gets built first (the card's effect handler, generically, vs.
+  the Eternal Chaos mechanic) is the reusable building block for the other;
+  they should not be designed or implemented twice. Note the card's own
+  effect is narrower (put one card into hand, not "build a sideboard from
+  everything opened") — Eternal Chaos's dynamic-sideboard-from-packs piece
+  is an additional layer on top of the same open-a-pack primitive, not a
+  1:1 match.

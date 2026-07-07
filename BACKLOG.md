@@ -265,6 +265,315 @@ so there's a record of what's already been resolved.
   > card-specific loop. Use `/add-interactive-effect` for the
   > choice/WaitingFor round-trip piece.
 
+### [bug-fix] Pact of Negation doesn't lose the game on unpaid deferred cost (GitHub #1058)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1058](https://github.com/phase-rs/phase/issues/1058);
+  Vintage staple (free counterspell protecting combo, ~77% inclusion in
+  relevant decks) — no open PR.
+- **Verified Oracle text:** "Counter target spell. At the beginning of
+  your next upkeep, pay {3}{U}{U}. If you don't, you lose the game." ({0})
+- **Reported bug:** AI doesn't lose the game when it can't/doesn't pay the
+  deferred {3}{U}{U} cost on the following upkeep.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Pact of Negation (GitHub phase-rs/phase#1058): the deferred
+  > "pay {3}{U}{U} at your next upkeep or lose the game" clause isn't
+  > enforced. Verify Oracle text against Scryfall first. This is a
+  > delayed-triggered-cost pattern shared by the whole Pact cycle (Pact of
+  > Negation, Pact of the Titan, Slaughter Pact, etc.) — trace how any
+  > existing Pact is modeled before assuming none are, and build/fix the
+  > shared delayed-trigger + "lose the game if unpaid" primitive rather
+  > than a one-off check. Use `/add-trigger` for the delayed-trigger wiring.
+
+### [bug-fix] Karn, the Great Creator's static doesn't stop opponents' artifact activations (GitHub #1080)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1080](https://github.com/phase-rs/phase/issues/1080);
+  Karn is the centerpiece of Karn Shops, one of Vintage's current top
+  archetypes — no open PR.
+- **Verified Oracle text:** "Activated abilities of artifacts your
+  opponents control can't be activated." plus his +1/−2 loyalty abilities.
+  ({4}, planeswalker)
+- **Reported bug:** with Karn in play, if an opponent's land is turned into
+  an artifact creature (e.g. via Liquimetal Coating), the opponent can
+  still activate abilities from it — the static isn't being applied to
+  permanents that become artifacts after Karn is already on the
+  battlefield, or isn't checked at activation time at all.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Karn, the Great Creator (GitHub phase-rs/phase#1080): his static
+  > "Activated abilities of artifacts your opponents control can't be
+  > activated" isn't enforced against permanents that become artifacts
+  > after Karn enters (e.g. a land turned into an artifact creature by
+  > Liquimetal Coating). Verify Oracle text against Scryfall first. Trace
+  > how other "can't activate abilities" static restrictions are checked
+  > at activation time (this is a general activation-legality-check
+  > pattern, not Karn-specific — CR 602.5 governs activated ability
+  > legality checks, verify the number against
+  > `docs/MagicCompRules.txt`) and make sure the check re-evaluates
+  > current characteristics rather than caching type at ETB. Use
+  > `/add-static-ability`.
+
+### [bug-fix] Cityscape Leveler's Powerstone token is delayed and goes to the wrong controller (GitHub #1079)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1079](https://github.com/phase-rs/phase/issues/1079);
+  sideboard/maindeck payoff in Vintage Karn Shops — no open PR.
+- **Verified Oracle text:** "When you cast this spell and whenever this
+  creature attacks, destroy up to one target nonland permanent. Its
+  controller creates a tapped Powerstone token." Trample, Unearth {8}.
+  ({8})
+- **Reported bug:** the Powerstone token isn't created immediately when
+  the ability resolves (sometimes appears only after a later
+  trigger/cast), and it's always created under the Leveler's controller
+  instead of the destroyed permanent's controller.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Cityscape Leveler (GitHub phase-rs/phase#1079): the Powerstone
+  > token from "Its controller creates a tapped Powerstone token" must be
+  > created as part of the same resolution as the destroy effect, under
+  > the *destroyed permanent's controller* — not the Leveler's controller,
+  > and not deferred to a later trigger. Verify Oracle text against
+  > Scryfall first. Trace how other "destroy target permanent, its
+  > controller creates X" effects resolve controller references (this is
+  > a general `ControllerRef` composition pattern per CLAUDE.md, not
+  > Leveler-specific) before writing new resolution logic.
+
+### [bug-fix] Expressive Iteration sends cards to the wrong zones (GitHub #1271)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1271](https://github.com/phase-rs/phase/issues/1271);
+  played in Vintage Izzet fast-mana shells — no open PR.
+- **Verified Oracle text:** "Look at the top three cards of your library.
+  Put one of them into your hand, put one of them on the bottom of your
+  library, and exile one of them. You may play the exiled card this
+  turn." ({U}{R})
+- **Reported bug:** after choosing the hand card, the engine sends the
+  chosen exile-card to the graveyard (unplayable) and sends the real
+  bottom-of-library card to exile instead — the zone assignments for the
+  other two cards are swapped/wrong.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Expressive Iteration (GitHub phase-rs/phase#1271): of the two
+  > non-hand cards from "look at the top three," one must go to the
+  > bottom of the library and the other to exile (playable this turn) —
+  > currently the exile-destined card is going to the graveyard and the
+  > bottom-library card is going to exile instead. Verify Oracle text
+  > against Scryfall first. This is the same "look at N, distribute to
+  > different zones" shape as other impulse-draw-plus-card-advantage
+  > effects — trace how zone assignment is wired for the modal choice
+  > before fixing, since a swapped zone-target bug like this may also
+  > affect other multi-destination reveal effects sharing the same
+  > resolver path.
+
+### [bug-fix] Relic of Progenitus targeting and second mode are both broken (GitHub #1077)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1077](https://github.com/phase-rs/phase/issues/1077);
+  standard Vintage sideboard graveyard hate against Dredge (a current
+  top-3 Vintage archetype) — no open PR.
+- **Verified Oracle text:** "{T}: Target player exiles a card from their
+  graveyard. {1}, Exile this artifact: Exile all graveyards. Draw a
+  card." ({1})
+- **Reported bug:** activating the first ability prompts for a target
+  player but then shows the *activator's own* graveyard regardless of who
+  was targeted, plus asks for a card selection even though the ability
+  itself doesn't target a card. The second ability (exile all graveyards
+  + draw) doesn't trigger/work at all — only the first ability seems to
+  fire.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Relic of Progenitus (GitHub phase-rs/phase#1077): (1) the first
+  > ability's target player isn't respected — it shows the activator's
+  > own graveyard instead of the targeted player's, and the exiled card
+  > should be chosen by the *targeted player*, not the activator; (2) the
+  > second ability (sacrifice-cost "exile all graveyards, draw a card")
+  > isn't available/doesn't resolve at all — this card has two
+  > independent activated abilities, not one. Verify Oracle text against
+  > Scryfall first. Trace how other two-activated-ability artifacts expose
+  > both abilities as separate choices before fixing.
+
+### [bug-fix] Endurance's ETB fizzles if killed in response (GitHub #1059)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1059](https://github.com/phase-rs/phase/issues/1059);
+  free pitch-elemental graveyard hate/blocker played across Legacy/Vintage
+  — no open PR.
+- **Verified Oracle text:** "Flash, Reach. When this creature enters, up
+  to one target player puts all the cards from their graveyard on the
+  bottom of their library in a random order. Evoke — Exile a green card
+  from your hand." ({1}{G}{G})
+- **Reported bug:** if Endurance is killed in response to its own ETB
+  trigger, the trigger fizzles instead of resolving.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Endurance (GitHub phase-rs/phase#1059): its ETB trigger ("up to
+  > one target player puts all cards from their graveyard on the bottom
+  > of their library") must still resolve even if Endurance is removed in
+  > response to the trigger — per CR 603.3d/603.6b, a triggered ability
+  > exists independently on the stack once it triggers and doesn't fizzle
+  > just because its source left the battlefield (verify the exact CR
+  > numbers against `docs/MagicCompRules.txt` before citing). This is a
+  > general "leaves-battlefield-after-trigger" correctness class, not
+  > Endurance-specific — check whether other ETB triggers share the same
+  > bug via whatever resolves triggered abilities independent of source
+  > continued existence.
+
+### [bug-fix] Violent Urge grants delirium bonus to all creatures, not just the target (GitHub #1272)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1272](https://github.com/phase-rs/phase/issues/1272);
+  Old School 93/94-legal (Legends) — flagged for completeness during a
+  format sweep, but honestly a minor/fringe card even in its own era, not
+  a real played staple. Low conviction, tracked anyway per instruction.
+- **Verified Oracle text:** "Target creature gets +1/+0 and gains first
+  strike until end of turn. Delirium — If there are four or more card
+  types among cards in your graveyard, that creature gains double strike
+  until end of turn." ({R})
+- **Reported bug:** with delirium active, double strike is granted to all
+  creatures instead of just the targeted creature.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Violent Urge (GitHub phase-rs/phase#1272): the delirium clause
+  > ("that creature gains double strike") must apply only to the single
+  > targeted creature, not all creatures — "that creature" refers back to
+  > the same target as the base +1/+0/first strike effect, it isn't a new
+  > unrestricted grant. Verify Oracle text against Scryfall first. This
+  > looks like a `~`/target-reference resolution bug likely shared by
+  > other delirium/threshold "that creature gains X" follow-up clauses —
+  > check whether the same reference-scoping bug affects other
+  > conditional-bonus cards with an identical "target creature ... ;
+  > condition — that creature also gains Y" shape before scoping the fix
+  > to just this card.
+
+### [bug-fix] Mother of Runes doesn't let you choose the protection color (GitHub #624)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#624](https://github.com/phase-rs/phase/issues/624);
+  Middle-School/Premodern-era (Urza's Legacy) white-aggro staple, still a
+  played 1-drop across Legacy/Premodern/Canadian-Highlander today — no
+  open PR.
+- **Verified Oracle text:** "{T}: Target creature you control gains
+  protection from the color of your choice until end of turn." ({W})
+- **Reported bug:** the granted protection isn't tied to an actual player
+  choice — engine behaves as if it grants protection from a fixed/random
+  color rather than prompting the controller to pick one.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Mother of Runes (GitHub phase-rs/phase#624): "protection from the
+  > color of your choice" requires a color-choice prompt to the ability's
+  > controller at activation, then grants protection from that specific
+  > chosen color — not a fixed or random color. Verify Oracle text against
+  > Scryfall first. This is a general "choose a color" cost/effect
+  > parameter shared by many cards (e.g. other protection-granting
+  > effects, color-choice CDAs) — trace how color choice is modeled
+  > elsewhere in the engine before adding a new mechanism. Use
+  > `/add-interactive-effect` for the choice round-trip.
+
+### [bug-fix] Solitary Confinement prevents damage to all players instead of just its controller (GitHub #1062)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1062](https://github.com/phase-rs/phase/issues/1062);
+  Middle-School-era (Judgment) casual prison piece — moderate match, not
+  a top competitive staple even in its era, tracked for completeness.
+- **Verified Oracle text:** "At the beginning of your upkeep, sacrifice
+  this enchantment unless you discard a card. Skip your draw step. You
+  have shroud. Prevent all damage that would be dealt to you." ({2}{W})
+- **Reported bug:** the damage-prevention clause is being applied
+  globally (prevents damage to all players) instead of scoped to the
+  enchantment's controller only.
+- **Before implementing:** re-confirm still reproduces on current `main`.
+- **Prompt:**
+  > Fix Solitary Confinement (GitHub phase-rs/phase#1062): "Prevent all
+  > damage that would be dealt to you" must scope to the enchantment's
+  > controller only, not all players. Verify Oracle text against Scryfall
+  > first. This looks like a `you`-reference resolved as a global/no-op
+  > scope instead of `ControllerRef::You` in a damage-prevention shield —
+  > check whether the same "prevent all damage to you" pattern (shared by
+  > other damage-prevention enchantments/effects) has the same
+  > controller-scoping bug elsewhere before fixing this one card in
+  > isolation.
+
+### [bug-fix] Calming Licid: transform effect no-ops and summoning sickness misapplied (GitHub #605, #604)
+
+- **Status:** open
+- **Source:** GitHub issues [phase-rs/phase#605](https://github.com/phase-rs/phase/issues/605)
+  and [phase-rs/phase#604](https://github.com/phase-rs/phase/issues/604);
+  Homelands (1995) — legal in Middle School, but Homelands commons are
+  notoriously weak and this was never actually a played card, even
+  casually. Low conviction, tracked anyway per instruction.
+- **Verified Oracle text:** "{W}, {T}: This creature loses this ability
+  and becomes an Aura enchantment with enchant creature. Attach it to
+  target creature. You may pay {W} to end this effect. Enchanted creature
+  can't attack." ({2}{W})
+- **Reported bugs:**
+  1. (#605) Activating the ability targeting an enemy creature does
+     nothing — the creature-to-Aura transform + attach never happens.
+  2. (#604) Separately, a Calming Licid that entered on a prior turn
+     can't be declared as an attacker on a later turn — summoning
+     sickness appears to be checked incorrectly (still treating it as
+     having just entered).
+- **Before implementing:** re-confirm both still reproduce on current
+  `main` — these may already share a root cause (e.g. some persistent
+  "just entered"/ability-availability flag not clearing correctly) worth
+  investigating together rather than as two unrelated fixes.
+- **Prompt:**
+  > Fix Calming Licid (GitHub phase-rs/phase#605 and #604): (1) its
+  > activated ability ("becomes an Aura enchantment ... attach it to
+  > target creature") doesn't perform the creature-to-Aura type change +
+  > attach at all when activated; (2) separately, it can't attack on a
+  > later turn even though it should no longer have summoning sickness.
+  > Verify Oracle text against Scryfall first. This is the Licid cycle's
+  > shared "creature becomes an Aura and attaches to another permanent,
+  > with a way to revert" mechanic (Homelands' five Licids all share this
+  > text shape) — trace how any existing type-changing "becomes an Aura"
+  > effect is modeled before writing new logic, and check whether the
+  > summoning-sickness bug is actually caused by the same underlying
+  > state transition (e.g. the type-change incorrectly resetting an
+  > "entered this turn" flag) rather than two unrelated defects.
+
+### [bug-fix] Molten Echoes gives haste to the wrong object and skips its end-step exile (GitHub #4709, #4708)
+
+- **Status:** open
+- **Source:** GitHub issues [phase-rs/phase#4709](https://github.com/phase-rs/phase/issues/4709)
+  and [phase-rs/phase#4708](https://github.com/phase-rs/phase/issues/4708);
+  Middle-School-era (Torment) — obscure even in its own era, low
+  conviction, tracked anyway per instruction.
+- **Verified Oracle text** (note: differs from both issues' "expected
+  behavior" — the real card says *exile*, not sacrifice, and grants haste
+  to the *token*, matching #4709 but contradicting #4708's assumption):
+  "As this enchantment enters, choose a creature type. Whenever a
+  nontoken creature you control of the chosen type enters, create a token
+  that's a copy of that creature. That token gains haste. Exile it at the
+  beginning of the next end step." ({2}{R}{R})
+- **Reported bugs:**
+  1. (#4709) The *original* nontoken creature gets haste instead of the
+     copy token — confirmed wrong against Oracle text, "that token gains
+     haste" clearly refers to the created copy.
+  2. (#4708) Reporter expected the token to be *sacrificed* at end step;
+     actual text says *exile*, and only "it" (the single token just
+     created) — not a sacrifice-all-tokens effect. The real bug to fix is
+     that the token isn't being exiled at the next end step at all
+     (whether via a missing delayed trigger or one that never fires), not
+     that it isn't being sacrificed.
+- **Before implementing:** re-confirm still reproduces on current `main`,
+  and implement the *exile*, not sacrifice, behavior — do not blindly
+  follow the issue's "expected behavior" text.
+- **Prompt:**
+  > Fix Molten Echoes (GitHub phase-rs/phase#4709 and #4708). Verify
+  > Oracle text against Scryfall first — note the real text says the
+  > created *token* gains haste (not the original creature, which #4709
+  > correctly flags) and that the token is *exiled* at the beginning of
+  > the next end step (a delayed trigger scoped to that one token, not a
+  > sacrifice-all-copies effect — #4708's "expected behavior" wording is
+  > wrong on this point, don't implement it as written). Fix: (1) haste is
+  > currently granted to the wrong object; (2) the delayed "exile at next
+  > end step" trigger for the token isn't firing at all. Trace how other
+  > "create a token copy, then exile/sacrifice it later" delayed-trigger
+  > effects are modeled (this is a general delayed-trigger-on-a-specific-
+  > object pattern) before writing new resolution logic.
+
 ### [feature] Theme Pack system (bundled, per-deployment branding)
 
 - **Status:** open

@@ -520,27 +520,6 @@ so there's a record of what's already been resolved.
   tests and 3/3 existing lib unit tests unaffected; `cargo fmt`/`clippy
   -D warnings` clean.
 
-### [bug-fix] Pact of Negation doesn't lose the game on unpaid deferred cost (GitHub #1058)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1058](https://github.com/phase-rs/phase/issues/1058);
-  Vintage staple (free counterspell protecting combo, ~77% inclusion in
-  relevant decks) — no open PR.
-- **Verified Oracle text:** "Counter target spell. At the beginning of
-  your next upkeep, pay {3}{U}{U}. If you don't, you lose the game." ({0})
-- **Reported bug:** AI doesn't lose the game when it can't/doesn't pay the
-  deferred {3}{U}{U} cost on the following upkeep.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Pact of Negation (GitHub phase-rs/phase#1058): the deferred
-  > "pay {3}{U}{U} at your next upkeep or lose the game" clause isn't
-  > enforced. Verify Oracle text against Scryfall first. This is a
-  > delayed-triggered-cost pattern shared by the whole Pact cycle (Pact of
-  > Negation, Pact of the Titan, Slaughter Pact, etc.) — trace how any
-  > existing Pact is modeled before assuming none are, and build/fix the
-  > shared delayed-trigger + "lose the game if unpaid" primitive rather
-  > than a one-off check. Use `/add-trigger` for the delayed-trigger wiring.
-
 ### [bug-fix] Relic of Progenitus's first ability doesn't respect the targeted player (GitHub #1077)
 
 - **Status:** open — narrowed from the original two-part report
@@ -888,6 +867,64 @@ so there's a record of what's already been resolved.
      correct.
 - **Action taken:** closed as resolved on GitHub with this evidence;
   no PR needed for this item.
+
+### [bug-fix] ~~Pact of Negation doesn't lose the game on unpaid deferred cost~~ — already fixed (GitHub #1058)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1058](https://github.com/phase-rs/phase/issues/1058)
+- **Investigated 2026-07-07.** Round 1 planning misdiagnosed this as a
+  parser AST-misattachment bug, but that diagnosis was built on a
+  **paraphrased single-line version** of the Oracle text instead of the
+  verbatim two-line text (`"Counter target spell.\nAt the beginning of
+  your next upkeep..."` — the parser dispatches per-line via
+  `split('\n')`, so joining the sentences routes to a different code
+  path than the real card hits). Caught by independent plan review
+  before any code was written — see `PIPELINE-LOG.md` standing lesson 8.
+- **Round 2, using the correct verbatim text:** confirmed the parser
+  already produces a correctly-nested AST (`LoseTheGame` properly nested
+  inside `PayCost`'s `sub_ability`, via
+  `try_parse_at_next_phase_delayed_trigger`, which already explicitly
+  handles the Pact cycle by name). Pivoted to a full runtime
+  `GameRunner` simulation (unpaid case → game-loss; paid case → no
+  loss) and confirmed both directions already work correctly on
+  current `main`. Found an existing regression test
+  (`crates/engine/tests/integration/issue_3871_summoners_pact.rs`)
+  covering the identical rider wording for Summoner's Pact, confirming
+  this is a known, already-fixed parser class, not specific to Pact of
+  Negation. No AI-specific gap found either — mana payment for a
+  resolution-time cost is fully automatic (no interactive prompt either
+  player could get stuck on).
+- **Action taken:** commented on the GitHub issue with this evidence;
+  no PR needed. A dedicated runtime regression test for Pact of
+  Negation itself (as opposed to Summoner's Pact) is a worthwhile but
+  separate coverage follow-up, not a bugfix.
+
+### [infra] Follow up on PR #5342 (verify-card-premise docs fix)
+
+- **Status:** open
+- **Source:** 2026-07-07, discovered while investigating Pact of
+  Negation — the CLAUDE.md "Verify the card, not just the rule"
+  principle and its matching `engine-planner` Step 0 hard gate had been
+  committed to this fork's `main` only (commit `4f5c2e0c7`, explicitly
+  marked "local-only, not for upstream PR" at the time), never to
+  `origin/main`. Every fix worktree is cut fresh from `origin/main`, so
+  that rule silently never reached any actual fix work, including
+  tonight's — Pact of Negation round 1 planning paraphrased the Oracle
+  text specifically because it never saw the hard gate's "verbatim,
+  never a paraphrase" language.
+- **Fix:** cherry-picked the doc-only commit onto a fresh branch off
+  `origin/main` and opened
+  [phase-rs/phase#5342](https://github.com/phase-rs/phase/pull/5342).
+  Touches `.claude/skills/engine-planner/SKILL.md`, which per
+  `.agents/pr-review-policy.toml` is excluded from the automated
+  review/merge loop (same as #5304) — will need a maintainer to merge
+  directly, will never auto-clear bot review.
+- **Prompt:**
+  > Check the status of phase-rs/phase PR #5342
+  > (`gh pr view 5342 --repo phase-rs/phase`). If merged, mark this item
+  > done. If still open with no activity after a week or so, post a
+  > polite follow-up asking for a manual merge (same situation as #5304
+  > above).
 
 ### [bug-fix] ~~Karn, the Great Creator's static doesn't stop opponents' artifact activations~~ — already fixed (GitHub #1080)
 

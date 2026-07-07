@@ -72,6 +72,18 @@ do **not** hardcode four new `GameFormat` variants.
   points (RESEARCH.md §5). Mana burn is a localized addition at the mana-pool
   drop site. "Damage uses the stack" is a fundamental reversal of CR 510.2 and a
   deep combat/stack/priority rework.
+- **Pre-M10 Wish templating is small and is a REAL functional difference.**
+  Fully investigated (RESEARCH.md §9). It reverts the M10 change that made exile
+  an in-game zone (CR 400.11/400.11a): pre-M10, Wishes could retrieve an owned
+  card removed from the game, not just from the sideboard. The engine already
+  implements the modern (post-M10) Wish cycle generically
+  (`Effect::SearchOutsideGame`, `OutsideGameSourcePool::Sideboard`) AND already
+  implements owned-face-up-exile retrieval for the Karn/Coax class
+  (`SideboardAndFaceUpExile` + tested collector/mover in
+  `search_outside_game.rs`). The legacy flag is therefore a one-line pool-widening
+  at one existing resolver hook — SMALL, not the "Medium" the first pass guessed.
+  Flag renamed `pre_m10_wish_templating` → `pre_m10_wish_reaches_exile` (it is a
+  pool-scope toggle, not a wording change).
 
 ## Open (needs a human decision — do NOT resolve unilaterally)
 

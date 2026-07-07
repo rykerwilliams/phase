@@ -102,7 +102,12 @@ ReprintPolicy {                         // enum — enforceable today only at se
 LegacyRuleSet {                         // three INDEPENDENT toggles (RESEARCH §8)
     mana_burn: bool,
     damage_uses_stack: bool,
-    pre_m10_wish_templating: bool,
+    pre_m10_wish_reaches_exile: bool,   // RESEARCH §9: Wishes reach owned face-up
+                                        // exile (pre-M10 "removed from the game").
+                                        // NOTE: renamed from the first-pass
+                                        // placeholder `pre_m10_wish_templating`
+                                        // — it is a functional POOL-SCOPE toggle,
+                                        // not a wording/templating change.
 }
 ```
 
@@ -141,10 +146,10 @@ mirroring how `FormatConfig::pioneer()` spreads `..Self::standard()`:
   d.banned.extend([Amulet of Quoz, Timmerian Fiends]; legacy unchanged`.
 - `middle_school()` — sets = Fourth Edition..Scourge; restricted = []; banned =
   [25 names]; reprint = AllowAnyPrinting; legacy = {mana_burn, damage_uses_stack,
-  pre_m10_wish_templating}.
+  pre_m10_wish_reaches_exile}.
 - `classic_magic()` — sets = Alpha..Scourge; restricted = [37 names]; banned =
   [11 names]; reprint = OriginalPrintingsOnly; legacy = {mana_burn,
-  damage_uses_stack, pre_m10_wish_templating}.
+  damage_uses_stack, pre_m10_wish_reaches_exile}.
 
 Set codes must be verified against the engine's `set_catalog` (MTGJSON codes)
 during implementation — the codes above are the expected MTGJSON codes but
@@ -182,11 +187,25 @@ custom formats don't use the external legality table). `sideboard_policy`,
   `GameEvent::ManaBurn { player_id, amount }`. Annotate as a pre-M10 rule
   removed by the M10 update (cite the obsolete-glossary entry
   `MagicCompRules.txt:8277`). ~Small; no new state machine.
-- **Wish templating** (`pre_m10_wish_templating`): pre-M10 wishes could retrieve
-  from *outside the game* including the removed-from-game zone; scope during
-  implementation via the existing `effects/search_outside_game.rs` path gated by
-  the flag. Medium; localized to wish resolution. (Confirm exact scope when
-  implementing — not fully traced this phase.)
+- **Pre-M10 Wish exile access** (`pre_m10_wish_reaches_exile`): fully traced in
+  RESEARCH §9. This is a REAL functional difference (not wording-only): pre-M10,
+  the "removed from the game" zone counted as *outside the game*, so a Wish could
+  retrieve an owned card that had been removed from the game (modern: exile); the
+  M10 update (CR 400.11/400.11a — "outside the game is not a zone"; only the
+  sideboard is outside the game) removed this. The engine already implements the
+  modern (post-M10) Wish cycle generically as `Effect::SearchOutsideGame` with
+  `source_pool: OutsideGameSourcePool::Sideboard` (`types/ability.rs:246`), and
+  already implements owned-face-up-exile retrieval for the Karn/Coax class via
+  `OutsideGameSourcePool::SideboardAndFaceUpExile` + the tested
+  `collect_face_up_exile_candidates` collector and `put_face_up_exile_into` mover
+  (`game/effects/search_outside_game.rs:72,105,141`). **SMALL** (revise the prior
+  "Medium"): the only change is a one-line pool-widening at the existing resolver
+  hook (`search_outside_game.rs:72`) — when the flag on
+  `GameState.format_config` (`types/game_state.rs:6787`) is set, treat a
+  `Sideboard`-pool search as if it were `SideboardAndFaceUpExile`. No parser
+  change (the flag is a runtime-resolution concern, not a parse concern), no new
+  effect/state/WaitingFor, full reuse of the tested collector/mover. Annotate as
+  a legacy rule reverting the M10 change (cite CR 400.11 / 400.11a / 701.23j).
 - **Damage uses the stack** (`damage_uses_stack`): LARGE (RESEARCH §6). Its own
   sub-project; likely out of MVP. Gated by the flag so Middle School / Classic
   are playable without it (with a documented fidelity caveat) until it lands.
@@ -253,7 +272,10 @@ implementation.
    registry entries + preset-integrity tests. Validates the engine from step 1.
 3. **Mana burn** — `LegacyRuleSet.mana_burn` at the drop-site hook. Small.
    Enables full fidelity for 93-94 / 95 and partial for Middle School / Classic.
-4. **Pre-M10 wish templating** — medium; gated by flag.
+4. **Pre-M10 Wish exile access** (`pre_m10_wish_reaches_exile`) — SMALL
+   (RESEARCH §9); one-line pool-widening at `search_outside_game.rs:72`, gated by
+   the flag, reusing the existing tested face-up-exile collector/mover. Can land
+   with or just after mana burn (step 3).
 5. **Damage uses the stack** — LARGE; its own sub-project; likely post-MVP.
    Middle School / Classic are playable-with-caveat until it lands.
 6. **Eternal Chaos (stretch)** — depends on 93-94 existing (step 2) **plus** a

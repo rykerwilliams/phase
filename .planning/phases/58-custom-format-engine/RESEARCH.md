@@ -237,3 +237,158 @@ CR-era toggle. This satisfies CLAUDE.md's intent ("mana burn and
 damage-uses-stack do NOT travel together… never a single old-rules boolean")
 while staying honest that the members are independent switches, not a
 parameterization of one axis.
+
+## 9. Pre-M10 Wish templating — SMALL (building block already exists); REAL functional difference
+
+This flag was named in §8 and the `LegacyRuleSet` struct but never investigated
+in the first pass. This section closes that gap with the same rigor as §5/§6.
+
+### 9a. What the EC ruleset actually requires (re-fetched 2026-07-07)
+
+Re-fetched `raw.githubusercontent.com/northern-information/lordsofthepit.com/main/src/pages/formats.md`.
+Both Middle School and Classic Magic restore the Judgment Wish cycle to
+pre-M10 function, worded verbatim as:
+
+> "…Cunning Wish, Burning Wish, Living Wish, Death Wish, and Golden Wish were
+> originally able to find an appropriate card that had either been removed from
+> the game, or was located in your sideboard. The Wish cycle functionality has
+> been restored to allow this."
+
+So the required behavior is explicit: a Wish may retrieve a matching card the
+player owns **that has been removed from the game** (modern: exile), in
+addition to the sideboard.
+
+### 9b. What the M10 (Magic 2010, July 2009) update actually changed — REAL, not wording-only
+
+The M10 rules update renamed the **"removed from the game" zone to "exile"** and
+made exile a *defined in-game zone*. Sources:
+
+- MTG Wiki "Wish" / Magic Judges rules tips (`blogs.magicjudges.org/rulestips/2013/01/you-cant-burning-wish-for-exiled-cards/`):
+  "the exile zone is a zone in the game, those cards aren't outside of the game,
+  so you can no longer Wish for those cards." Before M10, Wishes could acquire
+  a card from the sideboard **or** a card that had been "removed from the game";
+  after M10, only the sideboard qualifies.
+- Current CR confirms the *modern* boundary this flag reverts:
+  - `docs/MagicCompRules.txt:1982` — **CR 400.11**: "An object is outside the
+    game if it isn't in any of the game's zones. **Outside the game is not a
+    zone.**"
+  - `docs/MagicCompRules.txt:1984` — **CR 400.11a**: "Cards in a player's
+    sideboard are outside the game."
+  - `docs/MagicCompRules.txt:3486` — **CR 701.23j**: "If an effect instructs a
+    player to search outside the game for a card, that player may choose an
+    appropriate card they own from outside the game."
+  - Exile (CR 406) is a normal in-game zone, so exiled cards are *not* "outside
+    the game" and are ineligible for a modern Wish.
+
+**Verdict: this is a genuine functional / gameplay difference, NOT a
+wording-only templating change.** It changes the *set of legal choices offered
+during resolution*: a card exiled during the game (e.g. by the Wish's own
+"Exile ~" clause, by cycling/foretell-era effects, by an opponent's exile
+removal, etc.) is a legal Wish target pre-M10 and an illegal one post-M10. That
+is directly observable at the table, so the engine must model it — it is not a
+no-op flag. (The label "templating" in the flag name is therefore a slight
+misnomer; see §9e and the PLAN naming note.)
+
+### 9c. phase.rs already implements the Wish cycle — in modern (post-M10) form
+
+The engine has a full, general outside-the-game search effect, and the M10
+distinction is already a first-class typed axis:
+
+- **`Effect::SearchOutsideGame { filter, count, reveal, destination, source_pool }`**
+  (`types/ability.rs:10347-10356`).
+- **`OutsideGameSourcePool`** (`types/ability.rs:246-260`) is exactly the M10
+  boundary as a typed enum:
+  - `Sideboard` (default) — "CR 400.11a: Tournament sideboard / casual
+    outside-the-game collection." This is the **post-M10 Wish** pool.
+  - `SideboardAndFaceUpExile` — "CR 400.11a + CR 406.3: Sideboard plus matching
+    owned face-up exile." Used today for the modern **Karn, the Great Creator /
+    Coax from the Blind Eternities** class, whose Oracle text has an explicit
+    "…or choose a face-up … card you own in exile" disjunction.
+  - Helper `includes_face_up_exile()` (`ability.rs:257-259`).
+- **Parser** (`parser/oracle_effect/imperative.rs:2711-2818`,
+  `parse_search_and_creation_ast`): "reveal/play/cast a … card you own from
+  outside the game" lowers to `SearchOutsideGame`. A single-branch wording gets
+  `source_pool: Sideboard`; only the explicit second "…or choose a face-up …
+  in exile" branch (`parse_face_up_exile_branch`, `imperative.rs:2763-2768`)
+  produces `SideboardAndFaceUpExile`. Wish-cycle cards therefore parse to the
+  **sideboard-only (post-M10)** pool today, verified by tests:
+  - `parse_outside_game_wish_reveal_to_hand` (`imperative.rs:12312`),
+    `parse_outside_game_legacy_single_branch_still_works` (`:12461`),
+    `parse_outside_game_wish_play_from_sideboard` (`:12489`, the M19 "Wish"
+    card end-to-end through `parse_oracle_text`).
+  - `swallow_check.rs:4331` `optional_you_may_accepts_wishboard_creature_or_land…`
+    parses **Living Wish** by name; `swallow_check.rs:4143` parses a Burning-Wish-
+    shaped sorcery fetch. Karn is contrasted at `swallow_check.rs:4349`.
+- **Resolver** (`game/effects/search_outside_game.rs`): `resolve` builds the
+  sideboard candidate list (`:36-67`, CR 400.11a) and — **only when
+  `source_pool.includes_face_up_exile()`** (`:72`) — appends
+  `collect_face_up_exile_candidates` (`:105-135`), which already selects exile
+  objects the controller **owns** and that are **face-up** (`face_down` filtered
+  out at `:122`) and match the filter. Movement into hand/destination is handled
+  by `put_face_up_exile_into` (`:141-186`) through the standard `ChangeZone`
+  pipeline. This is the entire pre-M10 retrieval mechanism, already built and
+  tested (`karn_minus_two_pulls_face_up_exile_artifact_to_hand`,
+  `search_outside_game.rs:654`).
+
+Searched `crates/engine` for `burning wish|cunning wish|living wish|golden
+wish|death wish|glittering wish` — matches only in `search_outside_game.rs`
+(test scaffolding names) and `swallow_check.rs` (Living Wish parse test); no
+per-card special-casing anywhere. The class is handled generically by the
+`SearchOutsideGame` parser pattern, so the real named cards
+(Burning/Cunning/Living/Golden/Death Wish) parse via the same path when present
+in the generated `card-data.json`.
+
+### 9d. Why the modern face-up-exile pool is a rules-faithful model of pre-M10 RFG
+
+Pre-M10 "removed from the game" cards that a Wish could fetch were, in practice,
+exactly *cards the player owns that are visible* — you cannot choose a card you
+don't own, and hidden (face-down) removed cards were never eligible Wish
+targets. That is precisely what `collect_face_up_exile_candidates` already
+enforces (`owner == controller` + `!face_down`). So the pre-M10 rule is
+faithfully expressed by *widening a Wish-class search's effective pool to the
+already-existing `SideboardAndFaceUpExile` behavior* — no new candidate-
+collection logic, no new zone, no new movement path.
+
+### 9e. Hook point and size — SMALL (revise PLAN's "Medium")
+
+`GameState` already carries the resolved format config:
+`GameState.format_config: FormatConfig` (`types/game_state.rs:6787`), and PLAN
+§1 places `LegacyRuleSet` under `FormatConfig.custom_rules`. The resolver has
+direct access to it.
+
+**The entire change is one flag check at one existing hook.** In
+`search_outside_game::resolve`, the exile-append condition at
+`search_outside_game.rs:72` becomes, in effect:
+
+```text
+if source_pool.includes_face_up_exile()
+    || state.format_config pre_m10_wish_templating flag is set
+{
+    choices.extend(collect_face_up_exile_candidates(state, ability, filter));
+}
+```
+
+That is: when the legacy flag is on, treat a Wish-class (`Sideboard`) search as
+if it were `SideboardAndFaceUpExile`. No parser change (the parser can't know
+the format anyway — the flag is a *runtime resolution* concern, not a parse
+concern), no new effect, no new state, no new WaitingFor variant, and full reuse
+of the tested face-up-exile collector and mover.
+
+**Size: SMALL — and materially smaller than PLAN §4's current "Medium"
+estimate.** The Medium framing predated discovering that
+`SideboardAndFaceUpExile` + `collect_face_up_exile_candidates` already implement
+the retrieval end-to-end. This should be re-classified alongside mana burn
+(§5) as a small, well-contained addition; unlike damage-on-stack (§6) it touches
+no state machine.
+
+**One CR-annotation note for implementation:** the pre-M10 behavior predates the
+current CR 400.11 zone model, so annotate the flag as a *legacy rule reverting
+the M10 change* — cite CR 400.11 / 400.11a (the modern boundary being relaxed)
+and CR 701.23j, exactly as mana burn cites the obsolete-glossary entry. The flag
+does **not** implement current CR; it deliberately re-enables removed behavior.
+
+**Naming caveat:** `pre_m10_wish_templating` mislabels a *functional pool-scope*
+toggle as a *wording* one. A clearer name is `pre_m10_wish_reaches_exile` (or
+`wish_reaches_removed_from_game`) — it names the actual behavior (Wishes reach
+owned face-up exile). See PLAN naming note. This is not a no-op / wording-only
+flag; it is a real, testable pool-widening.

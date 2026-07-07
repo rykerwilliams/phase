@@ -182,6 +182,26 @@ so there's a record of what's already been resolved.
     depends on 93-94 already existing and adds a genuinely new mechanic
     (in-match pack-opening + dynamic sideboard), not just a rules-flag
     combination.
+  - **Stub — Type 4's core rules as a possible future variant, NOT
+    researched or designed, just flagged for later consideration
+    (2026-07-07).** While cross-checking Dandan (`#5169`, a shared-library
+    format proposal — see below) against this design, confirmed via
+    WebSearch that **Type 4** (a real, decades-old casual format:
+    unlimited mana at all times, no lands, one spell per turn, chaos
+    targeting, last-player-standing) has a documented "all players use the
+    pool as a shared library" variant — the same zone-sharing shape as
+    Dandan. Type 4's shared-library variant is a candidate future preset
+    for the general custom-format engine's `SharedZones` building block
+    (see below), and its *other* core rules (infinite mana, no lands,
+    one-spell-per-turn, chaos targeting) are a candidate future
+    `LegacyRuleSet`-style axis in the same framework — each independently
+    toggleable, the same way mana-burn/damage-on-stack are for the EC
+    formats. **None of this has been investigated for engine feasibility**
+    (no idea yet how large "unlimited mana"/"no lands"/"one spell per
+    turn" are as engine changes) — this is a bare stub for a future
+    research pass, not a scoped ask. See
+    `.planning/phases/58-custom-format-engine/CONTEXT.md`'s Dandan
+    cross-reference for the verified sourcing.
 - **Architecture context already confirmed this session (applies whether
   the general custom-format engine turns out to be built on top of
   `GameFormat` or alongside it):**

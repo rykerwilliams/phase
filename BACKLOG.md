@@ -202,6 +202,69 @@ so there's a record of what's already been resolved.
   > and isn't fork-specific) rather than kept as a fork-only customization
   > — flag that choice back to me rather than assuming either way.
 
+### [bug-fix] Underworld Breach doesn't enforce its escape cost (GitHub #1033)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1033](https://github.com/phase-rs/phase/issues/1033),
+  surfaced via a Vintage-relevance sweep of unclaimed `[Card Bug]` issues —
+  no open PR addresses this.
+- **Verified Oracle text** (Scryfall, not from memory): "Each nonland card
+  in your graveyard has escape. The escape cost is equal to the card's mana
+  cost plus exile three other cards from your graveyard. At the beginning
+  of the end step, sacrifice this enchantment." ({1}{R})
+- **Reported bug:** casting a card via escape shows "Exile (0/0" and lets
+  the cast through without exiling anything — reporter looped a single
+  Dark Ritual infinitely with an empty graveyard. Underworld Breach also
+  lets itself be recast from the graveyard via its own escape ability,
+  which shouldn't be legal since it grants escape to *other* nonland cards
+  in the graveyard, not a recursive grant to itself once it's already on
+  the stack/battlefield each time.
+- **Before implementing:** re-confirm this still reproduces on current
+  `main` — the issue is unlabeled/`needs-triage` and may already be stale.
+- **Prompt:**
+  > Fix Underworld Breach (GitHub phase-rs/phase#1033): its escape-cost
+  > grant isn't enforcing "exile three other cards from your graveyard" —
+  > the UI shows a 0-card exile requirement and lets the cast through
+  > without exiling anything, and the card can illegally re-escape itself
+  > from the graveyard turn after turn. Verify current Oracle text against
+  > Scryfall before touching anything, trace how escape costs are
+  > authored/resolved elsewhere in the engine (this is a general "has
+  > escape" grant pattern, likely shared with cards like Uro/Prized
+  > Amalgam-style escape — build for the class per CLAUDE.md, not just
+  > this card), and confirm CR annotations for escape (CR 702.148 area —
+  > verify the exact number against `docs/MagicCompRules.txt` before
+  > citing it). Use `/add-engine-effect` or `/casting-stack-conditions` as
+  > appropriate once you've traced the existing cost-resolution authority.
+
+### [bug-fix] Ad Nauseam's repeat loop never adds revealed cards to hand (GitHub #1032)
+
+- **Status:** open
+- **Source:** GitHub issue [phase-rs/phase#1032](https://github.com/phase-rs/phase/issues/1032),
+  surfaced via the same Vintage-relevance sweep as the Underworld Breach
+  item above — no open PR addresses this.
+- **Verified Oracle text** (Scryfall, not from memory): "Reveal the top
+  card of your library and put that card into your hand. You lose life
+  equal to its mana value. You may repeat this process any number of
+  times." ({3}{B}{B})
+- **Reported bug:** the repeat-loop UI reveals the top card each time
+  "repeat" is clicked but never actually moves it to hand; life loss is
+  batched and applied all at once at the end instead of per-repetition
+  as each card is added.
+- **Before implementing:** re-confirm this still reproduces on current
+  `main` — the issue is unlabeled/`needs-triage` and may already be stale.
+- **Prompt:**
+  > Fix Ad Nauseam (GitHub phase-rs/phase#1032): the "repeat this process"
+  > loop reveals the top card of the library each click but never puts it
+  > into hand, and life loss is applied once in bulk at the end instead of
+  > immediately after each individual reveal/hand-add. Verify current
+  > Oracle text against Scryfall before touching anything. This is a
+  > repeated-optional-effect pattern (reveal → move zone → lose life →
+  > ask to repeat) — trace how other "you may repeat this process" or
+  > iterative reveal effects are modeled in the engine first (per
+  > CLAUDE.md's "trace before you build") rather than writing a
+  > card-specific loop. Use `/add-interactive-effect` for the
+  > choice/WaitingFor round-trip piece.
+
 ### [feature] Theme Pack system (bundled, per-deployment branding)
 
 - **Status:** open

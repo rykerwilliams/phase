@@ -541,35 +541,6 @@ so there's a record of what's already been resolved.
   > shared delayed-trigger + "lose the game if unpaid" primitive rather
   > than a one-off check. Use `/add-trigger` for the delayed-trigger wiring.
 
-### [bug-fix] Karn, the Great Creator's static doesn't stop opponents' artifact activations (GitHub #1080)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1080](https://github.com/phase-rs/phase/issues/1080);
-  Karn is the centerpiece of Karn Shops, one of Vintage's current top
-  archetypes — no open PR.
-- **Verified Oracle text:** "Activated abilities of artifacts your
-  opponents control can't be activated." plus his +1/−2 loyalty abilities.
-  ({4}, planeswalker)
-- **Reported bug:** with Karn in play, if an opponent's land is turned into
-  an artifact creature (e.g. via Liquimetal Coating), the opponent can
-  still activate abilities from it — the static isn't being applied to
-  permanents that become artifacts after Karn is already on the
-  battlefield, or isn't checked at activation time at all.
-- **Before implementing:** re-confirm still reproduces on current `main`.
-- **Prompt:**
-  > Fix Karn, the Great Creator (GitHub phase-rs/phase#1080): his static
-  > "Activated abilities of artifacts your opponents control can't be
-  > activated" isn't enforced against permanents that become artifacts
-  > after Karn enters (e.g. a land turned into an artifact creature by
-  > Liquimetal Coating). Verify Oracle text against Scryfall first. Trace
-  > how other "can't activate abilities" static restrictions are checked
-  > at activation time (this is a general activation-legality-check
-  > pattern, not Karn-specific — CR 602.5 governs activated ability
-  > legality checks, verify the number against
-  > `docs/MagicCompRules.txt`) and make sure the check re-evaluates
-  > current characteristics rather than caching type at ETB. Use
-  > `/add-static-ability`.
-
 ### [bug-fix] Cityscape Leveler's Powerstone token is delayed and goes to the wrong controller (GitHub #1079)
 
 - **Status:** open
@@ -1004,3 +975,37 @@ so there's a record of what's already been resolved.
      correct.
 - **Action taken:** closed as resolved on GitHub with this evidence;
   no PR needed for this item.
+
+### [bug-fix] ~~Karn, the Great Creator's static doesn't stop opponents' artifact activations~~ — already fixed (GitHub #1080)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1080](https://github.com/phase-rs/phase/issues/1080);
+  Karn is the centerpiece of Karn Shops, one of Vintage's current top
+  archetypes.
+- **Investigated 2026-07-07** by tracing the actual code on current `main`
+  before touching anything, per this repo's "verify the card, not just the
+  rule" policy — no worktree code changes were needed.
+- **Findings:**
+  1. `is_blocked_by_cant_be_activated` (`game/casting.rs`) evaluates
+     `StaticMode::CantBeActivated`'s `TypeFilter::Artifact` against
+     **live** `obj.card_types.core_types` at activation time, not a
+     cached/ETB-time snapshot.
+  2. `ContinuousModification::AddType` (`game/layers.rs:4861`) — the
+     mechanism Liquimetal Coating uses to turn a permanent into an
+     artifact — pushes directly into that same `core_types` field during
+     the continuous-effects layer pass. A land turned into an artifact
+     *after* Karn is already on the battlefield therefore feeds the
+     identical live field Karn's static checks against — exactly the
+     scenario this issue describes.
+  3. This was generalized in `d1c99a805` ("prohibitions: widen
+     CantBeActivated…"), which explicitly lists "Karn, the Great Creator
+     (first static)" as one of the cards it unlocked, and is already an
+     ancestor of current `main` (confirmed via `git merge-base
+     --is-ancestor`).
+  4. Two dedicated tests already cover this exact mechanism:
+     `karn_blocks_opponent_artifact_activation` and
+     `karn_permits_own_artifact_activation` in `game/casting_tests.rs`.
+- **Action taken:** could not close the issue directly (insufficient
+  GitHub permissions on `phase-rs/phase`); posted evidence as a comment
+  instead ([issuecomment-4908412649](https://github.com/phase-rs/phase/issues/1080#issuecomment-4908412649))
+  asking a maintainer to confirm and close. No PR needed for this item.

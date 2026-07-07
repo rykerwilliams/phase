@@ -202,40 +202,6 @@ so there's a record of what's already been resolved.
   > and isn't fork-specific) rather than kept as a fork-only customization
   > — flag that choice back to me rather than assuming either way.
 
-### [bug-fix] Underworld Breach doesn't enforce its escape cost (GitHub #1033)
-
-- **Status:** open
-- **Source:** GitHub issue [phase-rs/phase#1033](https://github.com/phase-rs/phase/issues/1033),
-  surfaced via a Vintage-relevance sweep of unclaimed `[Card Bug]` issues —
-  no open PR addresses this.
-- **Verified Oracle text** (Scryfall, not from memory): "Each nonland card
-  in your graveyard has escape. The escape cost is equal to the card's mana
-  cost plus exile three other cards from your graveyard. At the beginning
-  of the end step, sacrifice this enchantment." ({1}{R})
-- **Reported bug:** casting a card via escape shows "Exile (0/0" and lets
-  the cast through without exiling anything — reporter looped a single
-  Dark Ritual infinitely with an empty graveyard. Underworld Breach also
-  lets itself be recast from the graveyard via its own escape ability,
-  which shouldn't be legal since it grants escape to *other* nonland cards
-  in the graveyard, not a recursive grant to itself once it's already on
-  the stack/battlefield each time.
-- **Before implementing:** re-confirm this still reproduces on current
-  `main` — the issue is unlabeled/`needs-triage` and may already be stale.
-- **Prompt:**
-  > Fix Underworld Breach (GitHub phase-rs/phase#1033): its escape-cost
-  > grant isn't enforcing "exile three other cards from your graveyard" —
-  > the UI shows a 0-card exile requirement and lets the cast through
-  > without exiling anything, and the card can illegally re-escape itself
-  > from the graveyard turn after turn. Verify current Oracle text against
-  > Scryfall before touching anything, trace how escape costs are
-  > authored/resolved elsewhere in the engine (this is a general "has
-  > escape" grant pattern, likely shared with cards like Uro/Prized
-  > Amalgam-style escape — build for the class per CLAUDE.md, not just
-  > this card), and confirm CR annotations for escape (CR 702.148 area —
-  > verify the exact number against `docs/MagicCompRules.txt` before
-  > citing it). Use `/add-engine-effect` or `/casting-stack-conditions` as
-  > appropriate once you've traced the existing cost-resolution authority.
-
 ### [bug-fix] Ad Nauseam's repeat loop never adds revealed cards to hand (GitHub #1032)
 
 - **Status:** open
@@ -654,4 +620,36 @@ so there's a record of what's already been resolved.
 
 ## Done
 
-_(none yet)_
+### [bug-fix] ~~Underworld Breach doesn't enforce its escape cost~~ — already fixed (GitHub #1033)
+
+- **Status:** done — verified already fixed, no code change needed
+- **Source:** GitHub issue [phase-rs/phase#1033](https://github.com/phase-rs/phase/issues/1033),
+  surfaced via a Vintage-relevance sweep of unclaimed `[Card Bug]` issues.
+- **Investigated 2026-07-07** in an isolated worktree via the full
+  `engine-implementer` planning step (`/engine-planner`), then
+  independently re-verified by me directly (not just trusting the
+  planner agent): ran `cargo test -p engine --lib escape` and confirmed
+  all 31 tests pass, including the exact scenario in this issue
+  (`granted_escape_requires_exile_cost_payment`,
+  `ai_escape_cast_from_graveyard_pays_mana_and_exiles_five_cards`).
+  Confirmed `aa4ee3455` ("Generalize graveyard keyword grants: parse
+  escape continuation (Underworld Breach)...") is a real, merged ancestor
+  of current `main` via `git merge-base --is-ancestor`.
+- **Findings:**
+  1. The "exile 0/0, cast goes through anyway" bug no longer reproduces —
+     `effective_escape_data` (`game/keywords.rs`) refuses any escape grant
+     with no residual cost, and both `can_pay_escape_additional_cost`
+     (`game/casting.rs`) and the `AbilityCost::Exile` arm of
+     `pay_additional_cost` (`game/casting_costs.rs`) gate on the real
+     fixed count (3), not a clamped-to-available count.
+  2. The "Breach re-escapes itself from the graveyard" concern is
+     RAW-legal-question resolved as **not a bug**: per CR 604.2, a static
+     ability's continuous effect only exists while its source remains on
+     the battlefield (or in the zone the ability specifies) — once
+     Breach's own end-step trigger sacrifices it, its escape-granting
+     effect stops existing before it could apply to Breach sitting in the
+     graveyard. The engine's `for_each_static_effect_source` sources
+     grants exclusively from `battlefield_sources`, so this is already
+     correct.
+- **Action taken:** closed as resolved on GitHub with this evidence;
+  no PR needed for this item.

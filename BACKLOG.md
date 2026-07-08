@@ -562,43 +562,102 @@ so there's a record of what's already been resolved.
   > correctly; the original issue's claim about it not working appears to
   > be false.
 
-### [bug-fix] Calming Licid: transform effect no-ops and summoning sickness misapplied (GitHub #605, #604)
+### [feature] Licid cycle "becomes an Aura, attach, revert" mechanic is entirely unimplemented (GitHub #605, #604)
 
-- **Status:** open
+- **Status:** open — investigated 2026-07-07, upgraded from "bug-fix" to
+  "feature": this is a genuinely new mechanic, not a small bug, so it's
+  a bigger lift than the original backlog framing assumed. Deferred this
+  session in favor of other candidates given the low real-world priority
+  (see below) and the size of the actual build.
 - **Source:** GitHub issues [phase-rs/phase#605](https://github.com/phase-rs/phase/issues/605)
   and [phase-rs/phase#604](https://github.com/phase-rs/phase/issues/604);
-  Homelands (1995) — legal in Middle School, but Homelands commons are
-  notoriously weak and this was never actually a played card, even
-  casually. Low conviction, tracked anyway per instruction.
-- **Verified Oracle text:** "{W}, {T}: This creature loses this ability
+  Homelands (1995) — Homelands commons are notoriously weak and this was
+  never actually a played card, even casually. Low conviction, tracked
+  anyway per instruction.
+- **Verified: this is a real 12-card cycle**, not just Calming Licid —
+  fetched all 12 directly from Scryfall's search API this session
+  (`type:Licid`), not from memory: Calming, Convulsing, Corrupting,
+  Dominating, Enraging, Gliding, Leeching, Nurturing, Quickening,
+  Stinging, Tempting, and Transmogrifying Licid. All 12 share the
+  **identical** shape — "**[cost], {T}: This creature loses this ability
   and becomes an Aura enchantment with enchant creature. Attach it to
-  target creature. You may pay {W} to end this effect. Enchanted creature
-  can't attack." ({2}{W})
-- **Reported bugs:**
-  1. (#605) Activating the ability targeting an enemy creature does
-     nothing — the creature-to-Aura transform + attach never happens.
-  2. (#604) Separately, a Calming Licid that entered on a prior turn
-     can't be declared as an attacker on a later turn — summoning
-     sickness appears to be checked incorrectly (still treating it as
-     having just entered).
-- **Before implementing:** re-confirm both still reproduce on current
-  `main` — these may already share a root cause (e.g. some persistent
-  "just entered"/ability-availability flag not clearing correctly) worth
-  investigating together rather than as two unrelated fixes.
+  target creature. You may pay [cost] to end this effect.**" — differing
+  only in activation/end cost and the granted ability while attached
+  (can't attack, can't block, fear, control-steal, haste, flying,
+  regenerate, first strike, drain-on-tap, force-block, or
+  artifact+pump). Any fix must be parameterized across all 12, not
+  hardcoded to Calming Licid's "can't attack" grant.
+- **Investigated 2026-07-07 — #605 confirmed genuinely unimplemented,
+  #604 unconfirmed / possibly not a real independent bug:**
+  1. **(#605, real)** Exhaustive grep for "becomes an aura"/"become an
+     aura" across `crates/engine/src/parser/` returns zero non-test
+     hits for this shape. The only related machinery,
+     `Effect::ReturnAsAura` (`types/ability.rs:10236`), is NOT reusable
+     as-is — it's a **replacement effect fired during a zone change**
+     (a card entering the battlefield FROM THE GRAVEYARD as an Aura;
+     class members Old-Growth Troll, Bronzehide Lion, Harold and Bob),
+     structurally different from a Licid's activated ability
+     transforming an **already-battlefield** permanent in place. The
+     only other Licid-specific code in the repo
+     (`parser/clause_shell.rs:483`,
+     `is_you_may_pay_to_end_effect_phrase`) only covers the "you may
+     pay to end this effect" clause not making the whole activation an
+     optional yes/no prompt (a prior, narrower fix for issue #4000) —
+     it does not touch the transform/attach itself, which is a no-op
+     regardless of target.
+  2. **(#604, unconfirmed)** `has_summoning_sickness`
+     (`game/combat.rs:3171`) and the turn-start clear
+     (`game/turns.rs:1006-1015`) are fully generic with no Licid/
+     type-change special-casing anywhere. Since the transform in #605
+     never executes today, there's no existing code path that could
+     have produced whatever #604 originally observed — **re-verify #604
+     in isolation** (an untouched Licid across a turn boundary, no
+     ability activation involved) before assuming it's a real,
+     independent bug; it may describe confusion stemming from #605, or
+     may not reproduce at all.
+- **Design questions an implementation plan needs to resolve** (not yet
+  answered — this needs a fresh `/engine-planner` pass, not just this
+  research):
+  1. New `Effect` variant vs. composing existing building blocks (some
+     existing type-changing CDA pattern + `Attach` + a revert
+     mechanism)? `ReturnAsAura`'s shape (`enchant_filter: TargetFilter`,
+     `grants: Vec<ContinuousModification>`) is the closest analog to
+     trace even though it's not directly reusable.
+  2. How does "You may pay [cost] to end this effect" work as a
+     **revert** — a permanent gaining a new activated ability as part
+     of the transform, where activating it turns the Aura back into a
+     creature? What characteristics does it revert to (its original
+     printed characteristics, per CR 400.7's "new object" semantics —
+     verify the exact number against `docs/MagicCompRules.txt`)?
+  3. What happens if the enchanted creature leaves the battlefield —
+     does the Licid-as-Aura fall off/die per the standard "Aura with no
+     legal attachment" SBA (verify the exact CR number), or revert to a
+     creature? Trace how existing (non-Licid) Auras already handle this
+     — that building block should already exist and just needs to
+     apply correctly here, not be reinvented.
+  4. Targeting: "Attach it to target creature" is targeted at
+     **activation** time (CR 601.2c-style, verify against the activated-
+     ability equivalent), not chosen later — confirm this doesn't
+     conflict with "it" (the Licid itself) being a self-reference within
+     the same activated ability's resolution, not a new spell.
 - **Prompt:**
-  > Fix Calming Licid (GitHub phase-rs/phase#605 and #604): (1) its
-  > activated ability ("becomes an Aura enchantment ... attach it to
-  > target creature") doesn't perform the creature-to-Aura type change +
-  > attach at all when activated; (2) separately, it can't attack on a
-  > later turn even though it should no longer have summoning sickness.
-  > Verify Oracle text against Scryfall first. This is the Licid cycle's
-  > shared "creature becomes an Aura and attaches to another permanent,
-  > with a way to revert" mechanic (Homelands' five Licids all share this
-  > text shape) — trace how any existing type-changing "becomes an Aura"
-  > effect is modeled before writing new logic, and check whether the
-  > summoning-sickness bug is actually caused by the same underlying
-  > state transition (e.g. the type-change incorrectly resetting an
-  > "entered this turn" flag) rather than two unrelated defects.
+  > Implement the Licid cycle's "becomes an Aura, attach, revert"
+  > mechanic (GitHub phase-rs/phase#605), covering all 12 real cards
+  > (Calming, Convulsing, Corrupting, Dominating, Enraging, Gliding,
+  > Leeching, Nurturing, Quickening, Stinging, Tempting, Transmogrifying
+  > Licid — verify each against Scryfall, don't assume from this note).
+  > This is a genuinely new mechanic, not a small fix — `Effect::ReturnAsAura`
+  > is the closest existing analog but is NOT directly reusable (it's a
+  > graveyard-entry replacement effect, not an activated-ability
+  > self-transform of an already-battlefield permanent). Resolve the 4
+  > design questions above in the plan before writing any code. Treat
+  > #604 (summoning sickness) as a separate, lower-priority follow-up —
+  > re-verify it reproduces in isolation before planning any fix for it,
+  > since no Licid-specific summoning-sickness defect was found and the
+  > transform never executing today means there's nothing that could
+  > have produced whatever #604 originally observed. Use
+  > `/add-static-ability` and/or `/add-replacement-effect` as applicable
+  > once the design in question 1 is resolved.
 
 ### [bug-fix] Molten Echoes gives haste to the wrong object and skips its end-step exile (GitHub #4709, #4708)
 

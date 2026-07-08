@@ -1013,44 +1013,52 @@ so there's a record of what's already been resolved.
   Comment updated to cite the executed test instead. See
   `PIPELINE-LOG.md` standing lesson 11.
 
-### [bug-fix] ~~Underworld Breach doesn't enforce its escape cost~~ — already fixed (GitHub #1033)
+### [bug-fix] Underworld Breach's own escape grant applying to itself off-battlefield (GitHub #1033) — real bug, fixed via #5350 + #5381
 
-- **Status:** done — verified already fixed, no code change needed
+- **Status:** done — real bug, fixed (not "already fixed" as originally concluded)
 - **Source:** GitHub issue [phase-rs/phase#1033](https://github.com/phase-rs/phase/issues/1033),
   surfaced via a Vintage-relevance sweep of unclaimed `[Card Bug]` issues.
-- **Investigated 2026-07-07** in an isolated worktree via the full
-  `engine-implementer` planning step (`/engine-planner`), then
-  independently re-verified by me directly (not just trusting the
-  planner agent): ran `cargo test -p engine --lib escape` and confirmed
-  all 31 tests pass, including the exact scenario in this issue
-  (`granted_escape_requires_exile_cost_payment`,
-  `ai_escape_cast_from_graveyard_pays_mana_and_exiles_five_cards`).
-  Confirmed `aa4ee3455` ("Generalize graveyard keyword grants: parse
-  escape continuation (Underworld Breach)...") is a real, merged ancestor
-  of current `main` via `git merge-base --is-ancestor`.
-- **Findings:**
-  1. The "exile 0/0, cast goes through anyway" bug no longer reproduces —
-     `effective_escape_data` (`game/keywords.rs`) refuses any escape grant
-     with no residual cost, and both `can_pay_escape_additional_cost`
-     (`game/casting.rs`) and the `AbilityCost::Exile` arm of
-     `pay_additional_cost` (`game/casting_costs.rs`) gate on the real
-     fixed count (3), not a clamped-to-available count.
-  2. The "Breach re-escapes itself from the graveyard" concern is
-     RAW-legal-question resolved as **not a bug**: per CR 604.2, a static
-     ability's continuous effect only exists while its source remains on
-     the battlefield (or in the zone the ability specifies) — once
-     Breach's own end-step trigger sacrifices it, its escape-granting
-     effect stops existing before it could apply to Breach sitting in the
-     graveyard. The engine's `for_each_static_effect_source` sources
-     grants exclusively from `battlefield_sources`, so this is already
-     correct. Point 2 was originally only source-traced, not backed by
-     an executed test — re-verified by writing and running
-     `escape_grant_from_graveyard_source_does_not_apply_to_itself`
-     (pass), shipped as
+- **Point 1** ("exile 0/0, cast goes through anyway") confirmed already
+  fixed by `aa4ee3455` — no action needed, verified via
+  `cargo test -p engine --lib escape` (31/31 pass).
+- **Point 2 ("Breach re-escapes itself from the graveyard") — full saga:**
+  1. **2026-07-07, initial investigation:** concluded "not a bug" via
+     CR 604.2 source-tracing only (no executed test).
+  2. **Same night, re-verification:** wrote and ran a real discriminating
+     test (`escape_grant_from_graveyard_source_does_not_apply_to_itself`)
+     to back the claim with execution, not just source-reading — the
+     test **failed**, revealing point 2 was a real, live bug after all.
+     Root cause: `active_continuous_effects_from_static_definitions`
+     (`layers.rs`) skipped its zone-of-function gate entirely whenever a
+     static's `active_zones` was empty (the documented battlefield-only
+     default), so Breach's own grant kept applying after it left the
+     battlefield.
+  3. Full plan → review → implement → review pipeline (4 blockers found
+     across 3 planning rounds; 2 more unmigrated sibling functions with
+     the identical bug found across 2 implementation-review rounds)
+     produced a 6-function fix. Before it could be pushed, the maintainer
+     (`matthewevans`) independently pushed their own 3-commit fix
+     directly to the PR branch, scoped narrowly to just the one call path
+     Underworld Breach hits (a caller-side pre-filter on
+     `active_continuous_effects_from_base_static_source`) — merged as
      [phase-rs/phase#5350](https://github.com/phase-rs/phase/pull/5350).
-- **Action taken:** closed as resolved on GitHub with this evidence,
-  updated once the point-2 test landed. See `PIPELINE-LOG.md` standing
-  lesson 11.
+     Per explicit user instruction ("use his always"), deferred to the
+     maintainer's version rather than pushing a competing commit; the
+     broader fix was preserved on `archive/underworld-breach-broader-zone-gate-fix`
+     rather than discarded.
+  4. **Follow-up PR** [phase-rs/phase#5381](https://github.com/phase-rs/phase/pull/5381)
+     reconciled the two: verified which of the original 6 sibling fixes
+     still applied after #5350 merged (5 of 6 — only the one function
+     #5350 already fixed was dropped), confirmed the existing off-zone
+     test fixtures still pass unmodified under #5350's approach (no
+     `.active_zones()` additions needed after all), and shipped the
+     remaining 5 migrations plus a deleted redundant duplicate
+     (`graveyard_permission_functions_in_zone`) as a clean, non-competing
+     follow-up — including a discussion point (not a demanded fix) about
+     a possible CR 113.6b gap in #5350's own admission rule.
+- **Lesson:** "verify locally" cuts both ways — the same discipline that
+  catches a false "already fixed" claim can also *reveal* a real bug
+  behind one. See `PIPELINE-LOG.md` standing lessons 11–13.
 
 ### [bug-fix] ~~Pact of Negation doesn't lose the game on unpaid deferred cost~~ — already fixed (GitHub #1058)
 

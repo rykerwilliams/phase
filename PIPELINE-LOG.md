@@ -151,6 +151,39 @@ not as a scientific benchmark.
     logging the finding in prose. A checked-in test is a durable record
     that never has to be re-derived; a log entry only helps as far as the
     next reader trusts and re-verifies it.
+12. **A "verify locally" test written to CONFIRM a claim can instead
+    REFUTE it — treat that as a success, not a setback.** The
+    lesson-11 test for Underworld Breach's point 2
+    (`escape_grant_from_graveyard_source_does_not_apply_to_itself`) was
+    written to back up an "already correct, not a bug" conclusion with
+    real execution instead of source-tracing. It failed. That's the
+    system working exactly as intended — the discipline that catches a
+    false "already fixed" claim is the same discipline that catches a
+    false "not a bug" claim; don't be more confident in a negative
+    finding than a positive one just because it's less work to write.
+    When a confirmatory test surprises you, chase the surprise (full
+    plan/review/implement pipeline), don't rationalize it away.
+13. **When a human maintainer pushes their own commits directly to a PR
+    I opened, defer to their version — always.** Discovered mid-pipeline
+    that `matthewevans` had independently fixed the same bug (Underworld
+    Breach #1033) with a narrower, different approach, pushed straight to
+    PR #5350's branch while a 6-function fix was in flight on the same
+    branch. Per explicit user instruction ("use his always"): don't
+    rebase mine on top or try to merge the two into one commit — preserve
+    my work on an archive branch (`git push myfork <mine>:archive/<name>`,
+    not discarded, just not fighting for the same PR) and reset to their
+    tip. If my investigation found genuinely distinct, still-live bugs
+    their fix doesn't cover, that's legitimate follow-up work — but it
+    goes in a **new, non-overlapping PR** built on the merged result, not
+    a competing commit on their PR. Concretely this meant: after #5350
+    merged, re-verify which of the original findings still applied (5 of
+    6 — only the one function the maintainer's fix touched was dropped),
+    re-confirm existing tests still pass under *their* approach before
+    assuming any test-fixture change is still needed (it wasn't — their
+    admission rule made three tests pass for a different reason than
+    mine would have), and raise any remaining technical disagreement
+    (a possible CR 113.6b gap in their fix) as a PR discussion point, not
+    an assertion. See `feedback_defer_to_maintainer_commits.md` in memory.
 
 ---
 

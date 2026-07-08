@@ -25,6 +25,83 @@ so there's a record of what's already been resolved.
 
 ## Open
 
+### [research] Automated era-by-era card correctness sweep — start with Old School (93/94), move forward chronologically
+
+- **Status:** open
+- **Source:** 2026-07-08. Motivated directly by user frustration: manually
+  playing games and stumbling onto broken cards (Scourglass, the
+  Serum-Powder-deployment-lag false alarm, the Dredge/Bazaar report) is
+  tedious and not how bugs should get found. The goal of this item is to
+  **replace manual play-testing-as-bug-discovery with an automated sweep**,
+  not to produce another one-off manual audit.
+- **Scoping decision (explicit, from this session):** start with Old
+  School (93/94)-legal cards, then move forward through eras (Old School →
+  Premodern → Legacy/Vintage-legal older cards → ...), rather than a flat
+  whole-format sweep. Older/simpler cards are cheaper to verify and more
+  likely to reveal foundational bugs (like the Scourglass exception-clause
+  gap or the cast-controller-vs-owner bug found earlier this session) that
+  also affect newer cards sharing the same building blocks — fixing those
+  early has outsized leverage on later eras.
+- **Key finding this session, must inform the design:** Old School/93-94
+  is **not** a tracked format in the engine's own coverage system.
+  `LegalityFormat` (`crates/engine/src/database/legality.rs`) only goes
+  back to Premodern — no Old School entry exists, so `cargo coverage`'s
+  `coverage_by_format` cannot filter to it directly. The card-legality
+  list for Old School has to come from an external authoritative source:
+  reuse the Eternal Central 93/94 set list already referenced in the
+  "Custom/'design your own' format engine" backlog item above
+  (https://github.com/northern-information/lordsofthepit.com/blob/main/src/pages/formats.md),
+  or the underlying LEA/LEB/2ED/ARN/ATQ/3ED/LEG/DRK/FEM set-code list —
+  verify against that source, don't hardcode a remembered set list.
+  Premodern, Legacy, and Vintage ARE tracked (`LegalityFormat::Premodern`
+  /`::Legacy`/`::Vintage`), so later eras of this sweep can use
+  `cargo coverage`'s existing `coverage_by_format` output directly.
+- **Two-layer methodology (both required — this session proved layer 1
+  alone is not enough):**
+  1. **Structural gaps (cheap, fully automated):** `cargo coverage`'s
+     `cards[]` list where `supported == false`, filtered to the era's
+     legal-card set, gives a mechanical "definitely not implemented" list
+     with `gap_details` pinpointing the exact missing clause/effect.
+  2. **Supported-but-silently-wrong spot checks (the layer that actually
+     catches bugs like Scourglass):** `supported: true` only means the
+     parser produced a non-`Unimplemented` effect for every clause — it
+     does NOT mean the effect is runtime-correct. Scourglass showed
+     `supported: true` the entire time its exception clause was being
+     silently dropped. This layer needs real runtime verification (the
+     `/card-test` GameScenario/GameRunner recipe), prioritized toward
+     cards with irregular Oracle grammar most likely to hide silent bugs:
+     exception/"except for" clauses, replacement effects, multi-part
+     "then" sequences, cards whose effect interacts with another
+     mid-resolution player choice (Dredge-style replacements included).
+- **Automate the discovery, not just the fix:** the actual ask here is to
+  stop relying on the user hitting bugs live. Options to evaluate (don't
+  commit to one without checking feasibility first): (a) a `Workflow`-
+  based sweep that fans out one verification agent per era-legal card,
+  each doing the full session-established pipeline (verify Oracle text →
+  check existing coverage/tests → write or run a targeted runtime test →
+  report pass/fail), reporting back a structured pass/fail list instead of
+  requiring a human to play a game and notice something's off; (b)
+  AI-vs-AI self-play sessions (the engine already has an AI opponent) that
+  log anomalies (unexpected effect outcomes, panics, stuck WaitingFor
+  states) automatically across many simulated games — investigate whether
+  hooks for this already exist before building new ones. Whichever
+  approach, the deliverable is a system the user can point at an era and
+  get a bug list back, not a document someone has to maintain by hand.
+- **Prompt:**
+  > Design (don't yet implement) an automated card-correctness sweep,
+  > starting with Old School (93/94)-legal cards. Step 1: get the
+  > authoritative Old School card/set list (fetch the Eternal Central
+  > source linked above, or MTGJSON set codes for LEA/LEB/2ED/ARN/ATQ/3ED/
+  > LEG/DRK/FEM — verify, don't assume). Step 2: run `cargo coverage` and
+  > cross-reference its `cards[]` `supported: false` entries against that
+  > list for the mechanical gap list. Step 3: propose a concrete mechanism
+  > (Workflow fan-out, AI-self-play anomaly logging, or another approach)
+  > for automating layer-2 (supported-but-wrong) verification at scale
+  > without requiring the user to manually play games, and get sign-off
+  > on the approach before building it. Once Old School is swept and any
+  > real bugs are fixed, repeat for Premodern (tracked format, use
+  > `coverage_by_format` directly), then Legacy/Vintage-legal older cards.
+
 ### [infra] Follow up on PR #5236 and PR #5304 (mulligan bottoming fix)
 
 - **Status:** open

@@ -863,7 +863,11 @@ so there's a record of what's already been resolved.
   standing lesson 10 (heavy concurrent load from other active
   worktrees), not a real blocker.
 - **Action taken:** commented on the GitHub issue with this evidence;
-  no PR needed.
+  no PR needed. **Update:** re-ran the exact named test successfully
+  once machine load eased (`replacement_prevent_all_damage_to_you_without_duration`
+  passes) — comment updated to cite an executed run, not just a source
+  read. See `PIPELINE-LOG.md` standing lesson 11 for why this
+  re-verification pass happened at all.
 
 ### [bug-fix] ~~Violent Urge grants delirium bonus to all creatures, not just the target~~ — already fixed (GitHub #1272)
 
@@ -884,8 +888,14 @@ so there's a record of what's already been resolved.
   pump/debuff abilities", #2999) — which landed after this issue was
   filed. Violent Urge just never got a follow-up regression test or
   issue closure.
-- **Action taken:** commented on the GitHub issue with this evidence;
-  no PR needed.
+- **Action taken:** commented on the GitHub issue; **update:** the
+  original comment cited a deleted scratch test the investigating agent
+  didn't persist — re-verified by writing a real, permanent test
+  (`violent_urge_delirium_scopes_to_parent_target_not_all_creatures`),
+  ran it locally (pass), and shipped it as
+  [phase-rs/phase#5348](https://github.com/phase-rs/phase/pull/5348).
+  Comment updated to cite the executed test instead. See
+  `PIPELINE-LOG.md` standing lesson 11.
 
 ### [bug-fix] ~~Underworld Breach doesn't enforce its escape cost~~ — already fixed (GitHub #1033)
 
@@ -917,9 +927,14 @@ so there's a record of what's already been resolved.
      effect stops existing before it could apply to Breach sitting in the
      graveyard. The engine's `for_each_static_effect_source` sources
      grants exclusively from `battlefield_sources`, so this is already
-     correct.
-- **Action taken:** closed as resolved on GitHub with this evidence;
-  no PR needed for this item.
+     correct. Point 2 was originally only source-traced, not backed by
+     an executed test — re-verified by writing and running
+     `escape_grant_from_graveyard_source_does_not_apply_to_itself`
+     (pass), shipped as
+     [phase-rs/phase#5350](https://github.com/phase-rs/phase/pull/5350).
+- **Action taken:** closed as resolved on GitHub with this evidence,
+  updated once the point-2 test landed. See `PIPELINE-LOG.md` standing
+  lesson 11.
 
 ### [bug-fix] ~~Pact of Negation doesn't lose the game on unpaid deferred cost~~ — already fixed (GitHub #1058)
 
@@ -947,10 +962,16 @@ so there's a record of what's already been resolved.
   Negation. No AI-specific gap found either — mana payment for a
   resolution-time cost is fully automatic (no interactive prompt either
   player could get stuck on).
-- **Action taken:** commented on the GitHub issue with this evidence;
-  no PR needed. A dedicated runtime regression test for Pact of
-  Negation itself (as opposed to Summoner's Pact) is a worthwhile but
-  separate coverage follow-up, not a bugfix.
+- **Action taken:** commented on the GitHub issue. **Update:** the
+  runtime claim (unpaid → lose, paid → no-lose) wasn't independently
+  re-run at first, only the Summoner's Pact parser test was cited (which
+  doesn't actually assert the rider nesting in dispute here) — closed
+  that gap by writing and running two real `GameRunner` tests
+  (`pact_of_negation_loses_the_game_when_upkeep_cost_goes_unpaid`,
+  `pact_of_negation_does_not_lose_the_game_when_upkeep_cost_is_paid`,
+  both pass), shipped as
+  [phase-rs/phase#5351](https://github.com/phase-rs/phase/pull/5351).
+  Comment updated accordingly. See `PIPELINE-LOG.md` standing lesson 11.
 
 ### [infra] Follow up on PR #5342 (verify-card-premise docs fix)
 

@@ -119,6 +119,38 @@ not as a scientific benchmark.
     when hit repeatedly, fall back to `cargo check` plus careful manual
     trace rather than retrying indefinitely, and say so explicitly in
     the PR rather than silently shipping unverified.
+11. **A sub-agent's detailed, file/line-cited report is not the same as
+    local verification — and a hedged comment is not an acceptable
+    substitute for doing the verification.** Audited the four
+    "already fixed" GitHub comments posted tonight (Underworld Breach,
+    Pact of Negation, Violent Urge, Solitary Confinement) and found real
+    gaps: (a) three comments had literal `\`` escaping artifacts from
+    unnecessary backtick-escaping inside a single-quoted heredoc —
+    cosmetic, but sloppy; (b) more seriously, several claims rested on a
+    sub-agent's self-reported scratch test that was deleted and never
+    independently re-run — Pact of Negation's runtime claim, Violent
+    Urge's AST claim, and Underworld Breach's self-recast claim were all
+    "traced from source" or "reported by the investigation" rather than
+    personally executed. The user's reaction: "we can't post comments on
+    issues or do PR's unless we are as sure as we can be, that means
+    verifying things locally. Don't make me look dumb." A hedge
+    ("I read the code but didn't test it") is not a safe middle ground —
+    it reads as unprofessional to a maintainer and doesn't satisfy the
+    bar. **Fix applied:** for each gap, wrote a real, permanent,
+    executed test (not a scratch file) — `violent_urge_delirium_scopes_to_parent_target_not_all_creatures`
+    (#5348), `escape_grant_from_graveyard_source_does_not_apply_to_itself`
+    (#5350), `pact_of_negation_loses_the_game_when_upkeep_cost_goes_unpaid`
+    / `..._does_not_lose_the_game_when_upkeep_cost_is_paid` (#5351), plus
+    re-ran Solitary Confinement's existing named test directly — then
+    updated all four GitHub comments to cite the executed result. **Going
+    forward:** before posting any issue comment claiming a fix/non-repro,
+    or opening/updating a PR, personally run the specific test being
+    cited or read the exact assertion in *checked-in* (not deleted)
+    source — and when a claim is confirmed correct but has no persisted
+    test, write one and ship it as a small test-only PR rather than just
+    logging the finding in prose. A checked-in test is a durable record
+    that never has to be re-derived; a log entry only helps as far as the
+    next reader trusts and re-verifies it.
 
 ---
 

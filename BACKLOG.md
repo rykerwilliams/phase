@@ -25,6 +25,51 @@ so there's a record of what's already been resolved.
 
 ## Open
 
+### [feature] Connive N (N>1) + multi-draw-replacement interaction — follow-up from the Dredge/Bazaar fix
+
+- **Status:** open
+- **Source:** 2026-07-08, explicitly descoped from PR
+  [phase-rs/phase#5360](https://github.com/phase-rs/phase/pull/5360) (the
+  CR 121.6b multi-card-draw-replacement fix) during a 6-round adversarial
+  plan review.
+- **Context:** #5360 fixes `Effect::Draw{count: N>1}` (the general draw
+  path used by Ancestral Vision, Concentrate-class spells, etc.) so each
+  unit of a multi-card draw offers Dredge/Notion Thief/Hullbreacher-style
+  replacement independently, instead of one unit's replacement zeroing the
+  whole count. Connive N (N>1, CR 701.50d) draws through its own,
+  independent, non-delegating implementation in `connive.rs` and has the
+  IDENTICAL bug — but was deliberately NOT touched by #5360.
+- **Why deferred, not just missed:** `connive.rs:1389-1424` documents a
+  **previously shipped and fixed bug**: routing Connive's "you draw a
+  card, THEN that creature connives" (CR 701.50a) ordering through a
+  shared, generic mid-draw continuation mechanism caused the connive's
+  `ConniveDiscard` state to be silently clobbered by an unrelated epilogue
+  reset. The dedicated `pending_connive_reentry` slot exists specifically
+  to avoid that collision. #5360's `pending_multi_draw` continuation is
+  drained at the exact same `handle_replacement_choice` call site as
+  `pending_connive_reentry` — reusing it for Connive N risked reintroducing
+  that exact failure mode, and the review process didn't have enough
+  evidence to certify the two compose safely.
+- **Before designing anything:** trace `pending_connive_reentry`'s
+  original fix (git history/PR that introduced it, likely referencing
+  issue-like context similar to #4886) to understand exactly what broke
+  and why the dedicated slot was the chosen fix, so any new design doesn't
+  reintroduce a variant of the same problem.
+- **Prompt:**
+  > Fix Connive N (N>1, CR 701.50d) so a multi-count connive draw offers
+  > Dredge/Notion-Thief/Hullbreacher-style replacement independently per
+  > unit, matching the fix already shipped for the general draw path in
+  > phase-rs/phase#5360. Start by tracing `pending_connive_reentry`'s
+  > original introduction (git log on `crates/engine/src/game/effects/connive.rs`
+  > and `crates/engine/src/game/engine_replacement.rs`) to understand the
+  > prior collision this dedicated slot was built to avoid — the fix must
+  > not reuse `resume_multi_draw`/`pending_multi_draw` naively at the same
+  > resume site without first proving it doesn't reintroduce that
+  > collision (e.g. a per-unit-paused connive draw whose leading unit is
+  > ALSO the CR 701.50a "leading draw" needing deferred connive-linking).
+  > Use `/engine-planner` + `/review-engine-plan` given the delicacy shown
+  > by #5360's own 6-round review cycle on the adjacent, simpler case.
+
 ### [research] Automated era-by-era card correctness sweep — start with Old School (93/94), move forward chronologically
 
 - **Status:** open
@@ -1293,3 +1338,61 @@ so there's a record of what's already been resolved.
 - **PR:** [phase-rs/phase#5356](https://github.com/phase-rs/phase/pull/5356).
 - **Evidence posted:** comment on
   [#4710](https://github.com/phase-rs/phase/issues/4710#issuecomment-4910984069).
+
+### [bug-fix] Multi-card draws didn't offer Dredge (or any draw-replacement) independently per unit — fix opened
+
+- **Status:** in progress — real fix implemented and PR opened, awaiting
+  review/CI/merge.
+- **Source:** reported directly by the user (not a GitHub issue): "Multiple
+  times I tried to dredge the stinkweed imp. The time with bazaar drew no
+  cards. Activated bazaar to dredge, [word unclear], and then it just
+  asked me to discard three."
+- **Verified Oracle text** (Scryfall): Bazaar of Baghdad "{T}: Draw two
+  cards, then discard three cards." Stinkweed Imp "...Dredge 5 (If you
+  would draw a card, you may mill five cards instead. If you do, return
+  this card from your graveyard to your hand.)"
+- **Root cause confirmed 2026-07-08**, CR 121.6b: "If an effect replaces a
+  draw within a sequence of card draws, the replacement effect is
+  completed before resuming the sequence." The engine treated a
+  `Effect::Draw{count: N>1}` as ONE atomic replaceable event — accepting
+  Dredge on a `count: 2` draw zeroed the entire count (both cards' worth),
+  not just the one unit it replaced, yielding zero net cards drawn instead
+  of one dredged + one normal. Matches the report exactly (Bazaar of
+  Baghdad isn't in phase.rs's real Oracle-driven card set yet — only in
+  the dormant, out-of-scope `mtgish-import` data — but the underlying
+  engine bug is independent of that card's presence and is proven against
+  Ancestral Vision, a real shipped `count: 3` draw card).
+- **General class, not a one-card patch:** affects the cross-product of
+  every multi-card-draw effect (Ancestral Vision, Concentrate-class
+  spells, Windfall, Bazaar-class abilities once added) and every
+  `ReplacementEvent::Draw` producer (Dredge — an entire card class across
+  Vintage/Legacy, Notion Thief, Hullbreacher, and a count-doubling class
+  like Teferi's Ageless Insight/Brainsurge).
+- **Fix:** new `resume_multi_draw` in `game/effects/draw.rs`, looping one
+  unit at a time through the existing replacement primitives instead of
+  proposing the whole count as one event. A new `PendingMultiDraw{player,
+  remaining, accumulated}` continuation (mirroring the zone-move batch
+  machinery's proven re-pause contract) survives an arbitrary number of
+  sequential per-unit pauses. `apply_draw_after_replacement` now returns
+  the per-unit drawn count instead of writing `state.last_effect_count`
+  directly, so a chained "discard that many" sees the TRUE total across
+  the whole instruction (CR 609.3), not just the last unit processed. The
+  new continuation is torn down via `replacement::abandon_post_replacement_continuation`
+  (the single authority already used for `pending_connive_reentry` etc.,
+  CR 800.4a) on player departure.
+- **Explicitly out of scope, filed as a separate item above:** Connive N
+  (N>1) — has a documented history of a previously-fixed collision
+  between a shared generic mid-draw continuation and its own ordering
+  requirements; reusing the new mechanism there risked reintroducing it.
+- **Process note:** this fix went through 6 rounds of adversarial
+  `/review-engine-plan`, each surfacing a real, previously-hidden issue
+  (incomplete caller enumeration, an unaddressed count-doubling
+  replacement class, a hand-waved resume function signature,
+  `last_effect_count` corruption across loop iterations, the Connive
+  collision risk, and the elimination-cleanup fix's correct location).
+  During implementation, the first test run caught a genuine off-by-one in
+  the remaining-count bookkeeping, fixed before commit — a reminder that
+  even a heavily-reviewed plan still needs a real test run, not just
+  compile success, before trusting it.
+- **PR:** [phase-rs/phase#5360](https://github.com/phase-rs/phase/pull/5360)
+  (15698 passed, 0 failed, 0 regressions; clippy clean).

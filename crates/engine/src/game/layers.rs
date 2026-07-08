@@ -3116,19 +3116,23 @@ fn active_continuous_effects_from_static_definitions(
     // non-battlefield zones in which the static functions (e.g., Incarnation
     // cycle: "as long as this card is in your graveyard, ..."). If the source
     // is currently outside every declared zone, the static contributes no
-    // effects.
-    let source_zone = state.objects.get(&source_id).map(|o| o.zone);
+    // effects. The gate is the shared `static_functions_in_zone` predicate so
+    // this gather agrees with `active_static_definitions`.
+    let source_obj = state.objects.get(&source_id);
     for (def_idx, def) in static_definitions.iter().enumerate() {
         if def.mode != StaticMode::Continuous {
             continue;
         }
 
-        // CR 113.6 + CR 113.6b: Zone-of-function gate.
-        if !def.active_zones.is_empty() {
-            let Some(zone) = source_zone else { continue };
-            if !def.active_zones.contains(&zone) {
-                continue;
-            }
+        // CR 113.6 + CR 113.6b: shared zone-of-function gate — this is the
+        // root cause of issue #1033's second claim (a battlefield-only
+        // static kept contributing effects after its source left the
+        // battlefield for the graveyard).
+        let Some(source_obj) = source_obj else {
+            continue;
+        };
+        if !super::functioning_abilities::static_functions_in_zone(source_obj, def) {
+            continue;
         }
 
         let retained_condition = if let Some(condition) = &def.condition {
@@ -3817,18 +3821,22 @@ fn active_combat_assignment_rule_effects_from_static_definitions(
     static_definitions: &[StaticDefinition],
 ) -> Vec<ActiveCombatAssignmentRuleEffect> {
     let mut effects = Vec::new();
-    let source_zone = state.objects.get(&source_id).map(|o| o.zone);
+    let source_obj = state.objects.get(&source_id);
 
     for def in static_definitions {
         if def.mode != StaticMode::Continuous {
             continue;
         }
 
-        if !def.active_zones.is_empty() {
-            let Some(zone) = source_zone else { continue };
-            if !def.active_zones.contains(&zone) {
-                continue;
-            }
+        // CR 113.6 + CR 113.6b: shared zone-of-function gate, matching
+        // `active_static_definitions`. Combat-assignment-rule effects are
+        // `StaticMode::Continuous`-only (checked above), so the CR 113.6g
+        // stack exception is irrelevant here.
+        let Some(source_obj) = source_obj else {
+            continue;
+        };
+        if !super::functioning_abilities::static_functions_in_zone(source_obj, def) {
+            continue;
         }
 
         let retained_condition = if let Some(condition) = &def.condition {

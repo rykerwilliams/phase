@@ -26620,6 +26620,7 @@ fn self_graveyard_static_flashback_grant_is_castable() {
     obj.static_definitions.push(
         crate::types::ability::StaticDefinition::continuous()
             .affected(TargetFilter::SelfRef)
+            .active_zones(vec![Zone::Graveyard])
             .condition(crate::types::ability::StaticCondition::And {
                 conditions: vec![
                     crate::types::ability::StaticCondition::OpponentPoisonAtLeast { count: 3 },

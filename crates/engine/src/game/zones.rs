@@ -44,16 +44,17 @@ pub(super) fn copy_of_card_outside_battlefield_and_stack(obj: &GameObject) -> bo
 /// `obj.static_definitions` directly (via `active_static_definitions`) rather
 /// than the layer-resolved view of the object:
 ///
-/// 1. `active_zones`: `active_static_definitions` only enforces the
-///    `active_zones` membership gate for the Command zone
-///    (functioning_abilities.rs); for other zones the full `active_zones` gate
-///    lives in the layers pipeline (layers.rs), which this helper bypasses.
-///    Persistence here is therefore gated by `excluded_zones`, not by
-///    `active_zones`. This is sound for the shipping cards because their
-///    `excluded_zones` (Hand, Library) coincide with the inactive zones where
-///    objects never carry counters. A future `CountersPersistAcrossZones` card
-///    with a different active/excluded split would need an explicit
-///    `active_zones` check added here.
+/// 1. `active_zones`: `active_static_definitions` now enforces the full CR
+///    113.6 zone-of-function gate for every zone (functioning_abilities.rs) —
+///    empty `active_zones` defaults to battlefield-only, non-empty restricts to
+///    the listed zones — so persistence here is gated by BOTH `active_zones`
+///    (via `active_static_definitions`) and `excluded_zones` (checked below).
+///    This is a no-op behavior change for the shipping
+///    `CountersPersistAcrossZones` cards: their parser-synthesized
+///    `active_zones` already lists every zone the ability needs
+///    (`[Battlefield, Graveyard, Exile, Command, Stack]` per
+///    `parser/oracle_static/restriction.rs`), so the from-zone the object is
+///    moving out of is always covered.
 ///
 /// 2. Layer-6 ability removal (Humility / Yixlid Jailer's "Cards in graveyards
 ///    lose all abilities"): `evaluate_layers` (layers.rs) only applies layers to

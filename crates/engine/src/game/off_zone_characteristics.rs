@@ -678,6 +678,7 @@ mod tests {
         .push(
             StaticDefinition::continuous()
                 .affected(TargetFilter::SelfRef)
+                .active_zones(vec![Zone::Graveyard])
                 .modifications(vec![ContinuousModification::AddKeyword {
                     keyword: Keyword::Flashback(FlashbackCost::Mana(ManaCost::Cost {
                         generic: 2,
@@ -841,6 +842,7 @@ mod tests {
         let card_id = create_card(&mut state, PlayerId(0), "Viral Spawning", Zone::Graveyard);
         let static_def = StaticDefinition::continuous()
             .affected(TargetFilter::SelfRef)
+            .active_zones(vec![Zone::Graveyard])
             .modifications(vec![ContinuousModification::AddKeyword {
                 keyword: Keyword::Flashback(FlashbackCost::Mana(ManaCost::Cost {
                     generic: 2,

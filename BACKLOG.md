@@ -1176,3 +1176,43 @@ so there's a record of what's already been resolved.
 - **Evidence posted:** comment on
   [#1098](https://github.com/phase-rs/phase/issues/1098#issuecomment-4910583632)
   (can't close directly — no repo permissions).
+
+### [bug-fix] Scourglass's "except for artifacts and lands" exclusion was silently dropped — fix opened (GitHub #4710)
+
+- **Status:** in progress — real fix implemented and PR opened, awaiting
+  review/CI/merge.
+- **Source:** GitHub issue [phase-rs/phase#4710](https://github.com/phase-rs/phase/issues/4710)
+  ("[Card Bug] Scourglass" — actual: destroys all permanents; expected: any
+  permanent except for artifacts and lands).
+- **Verified Oracle text** (Scryfall): "{T}, Sacrifice this artifact: Destroy
+  all permanents except for artifacts and lands. Activate only during your
+  upkeep." ({3}{W}{W}, Artifact)
+- **Root cause confirmed 2026-07-07** via a live scratch parse of the exact
+  text: `parse_type_phrase_with_ctx` had no suffix grammar for "except for
+  `<type-list>`" — only the predicate-based "except those that
+  `<relative-clause>`" exclusion was recognized. The clause was silently
+  dropped with zero parse warning, so `Effect::DestroyAll` resolved against
+  the unfiltered `Permanent` population — an exact match for the report.
+- **General class, not a one-card patch:** a live Scryfall search
+  (`o:"except for" o:"destroy all"`) surfaced Elspeth Tirel's −5 ability
+  ("Destroy all other permanents except for lands and tokens") sharing the
+  identical grammar, with a heterogeneous type/property split (lands →
+  `TypeFilter::Non`, tokens → `FilterProp::NonToken`). Both fixed by the
+  same change. Mageta the Lion ("except for Mageta") and Slash the Ranks
+  ("except for commanders") are explicitly out of scope — their exceptions
+  name a specific permanent / a Commander-format designation, not a card
+  type, and the fix includes a hostile-fixture guard proving it declines
+  rather than mis-fires on those shapes.
+- **Fix:** new `parse_except_for_type_list_suffix` in `oracle_target.rs`,
+  reusing the existing `classify_negation` (already used by the
+  "nonartifact, nonland" prefix-negation loop) and the existing
+  Oxford-comma-tolerant `match_mass_union_separator` — no new
+  `TargetFilter`/`TypeFilter`/`FilterProp` variant, no runtime change
+  (`game/filter.rs`'s `TypeFilter::Non` already correctly treats artifact
+  creatures as satisfying "artifact" per CR 205.2b). 6 new tests (parser
+  suffix shape ×3 including the Mageta hostile fixture, full-ability-line
+  parse ×2, runtime artifact-creature-exclusion ×1). Full engine test suite
+  re-run clean: 15692 passed, 0 failed, 0 regressions.
+- **PR:** [phase-rs/phase#5356](https://github.com/phase-rs/phase/pull/5356).
+- **Evidence posted:** comment on
+  [#4710](https://github.com/phase-rs/phase/issues/4710#issuecomment-4910984069).

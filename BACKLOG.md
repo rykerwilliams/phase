@@ -1144,3 +1144,35 @@ so there's a record of what's already been resolved.
   test-coverage-only follow-up, not a functional gap.
 - **Action taken:** posted evidence as a comment linking the 3 actual
   fixing PRs (no permission to close directly). No PR needed.
+
+### [done] Land Grant's reveal-hand alternative cost — already fixed (GitHub #1098)
+
+- **Status:** done — verified already fixed, no code change needed.
+- **Source:** GitHub issue [phase-rs/phase#1098](https://github.com/phase-rs/phase/issues/1098)
+  ("Alternative cost - show hand with no land cards - doesn't work"),
+  surfaced via a fresh-issue sweep.
+- **Verified Oracle text** (Scryfall): "If you have no land cards in hand,
+  you may reveal your hand rather than pay this spell's mana cost. Search
+  your library for a Forest card, reveal that card, put it into your hand,
+  then shuffle." ({1}{G})
+- **Investigated 2026-07-07.** Traced the full production chain: the
+  parser already emits an `EffectCost(RevealHand)` casting option gated by
+  a `Not(ZoneCoreTypeCardCountAtLeast{Hand, Land, 1})` condition (existing
+  parser test `land_grant_reveal_hand_alternative_cost_option`), and
+  `payable_spell_alternative_cost_details` → `restrictions::evaluate_condition`
+  already handles that exact condition shape correctly (existing unit test
+  `zone_core_type_card_count_condition_checks_hand_card_types`). The same
+  mechanism class (conditional-gate alternative cost via
+  `payable_spell_alternative_cost_details`) already has full runtime
+  coverage for Ravenous Trap in `casting_tests.rs`. The one genuine gap was
+  a runtime test for Land Grant's specific condition+cost combination.
+  Added `land_grant_alt_cost_offered_with_no_lands_in_hand` and
+  `land_grant_alt_cost_not_offered_with_land_in_hand`, driving the real
+  `payable_spell_alternative_cost_details`/`can_cast_object_now`
+  production seam. Full `game::casting::tests` module re-run clean: 655
+  passed, 0 failed, 0 regressions.
+- **PR:** [phase-rs/phase#5354](https://github.com/phase-rs/phase/pull/5354)
+  (test-only, verified fresh off `origin/main` post-#5349).
+- **Evidence posted:** comment on
+  [#1098](https://github.com/phase-rs/phase/issues/1098#issuecomment-4910583632)
+  (can't close directly — no repo permissions).

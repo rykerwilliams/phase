@@ -659,9 +659,10 @@ so there's a record of what's already been resolved.
   > `/add-static-ability` and/or `/add-replacement-effect` as applicable
   > once the design in question 1 is resolved.
 
-### [bug-fix] Molten Echoes gives haste to the wrong object and skips its end-step exile (GitHub #4709, #4708)
+### [done] Molten Echoes gives haste to the wrong object and skips its end-step exile (GitHub #4709, #4708)
 
-- **Status:** open
+- **Status:** done — already fixed on `main`, verified with a new targeted
+  test, no production code change needed.
 - **Source:** GitHub issues [phase-rs/phase#4709](https://github.com/phase-rs/phase/issues/4709)
   and [phase-rs/phase#4708](https://github.com/phase-rs/phase/issues/4708);
   Middle-School-era (Torment) — obscure even in its own era, low
@@ -673,32 +674,25 @@ so there's a record of what's already been resolved.
   nontoken creature you control of the chosen type enters, create a token
   that's a copy of that creature. That token gains haste. Exile it at the
   beginning of the next end step." ({2}{R}{R})
-- **Reported bugs:**
-  1. (#4709) The *original* nontoken creature gets haste instead of the
-     copy token — confirmed wrong against Oracle text, "that token gains
-     haste" clearly refers to the created copy.
-  2. (#4708) Reporter expected the token to be *sacrificed* at end step;
-     actual text says *exile*, and only "it" (the single token just
-     created) — not a sacrifice-all-tokens effect. The real bug to fix is
-     that the token isn't being exiled at the next end step at all
-     (whether via a missing delayed trigger or one that never fires), not
-     that it isn't being sacrificed.
-- **Before implementing:** re-confirm still reproduces on current `main`,
-  and implement the *exile*, not sacrifice, behavior — do not blindly
-  follow the issue's "expected behavior" text.
-- **Prompt:**
-  > Fix Molten Echoes (GitHub phase-rs/phase#4709 and #4708). Verify
-  > Oracle text against Scryfall first — note the real text says the
-  > created *token* gains haste (not the original creature, which #4709
-  > correctly flags) and that the token is *exiled* at the beginning of
-  > the next end step (a delayed trigger scoped to that one token, not a
-  > sacrifice-all-copies effect — #4708's "expected behavior" wording is
-  > wrong on this point, don't implement it as written). Fix: (1) haste is
-  > currently granted to the wrong object; (2) the delayed "exile at next
-  > end step" trigger for the token isn't firing at all. Trace how other
-  > "create a token copy, then exile/sacrifice it later" delayed-trigger
-  > effects are modeled (this is a general delayed-trigger-on-a-specific-
-  > object pattern) before writing new resolution logic.
+- **Investigation:** both reported bugs are already fixed by the existing
+  "that token"/"it" anaphor-rewriting building block in
+  `oracle_effect/lower.rs` (`rewrite_parent_target_to_last_created` and
+  the sibling "that token" rewrite), the same infrastructure already
+  proven for Flameshadow Conjuring and Inalla, Archmage Ritualist. The one
+  genuinely untested piece was whether Molten Echoes' extra "of the chosen
+  type" filter on the trigger condition (`FilterProp::IsChosenCreatureType`)
+  interferes with that rewrite — it doesn't. Added
+  `molten_echoes_chosen_type_filter_preserves_last_created_anaphors`
+  (`crates/engine/src/parser/oracle_trigger_tests.rs`) confirming the
+  `CopyTokenOf` source stays `TriggeringSource` and the delayed exile
+  target binds `TargetFilter::LastCreated`. Full `oracle_trigger::tests`
+  module re-run clean: 964 passed, 0 failed, 0 regressions.
+- **PR:** [phase-rs/phase#5352](https://github.com/phase-rs/phase/pull/5352)
+  (test-only, verified fresh off `origin/main` post-#5349).
+- **Evidence posted:** comments on both
+  [#4709](https://github.com/phase-rs/phase/issues/4709#issuecomment-4910503767)
+  and [#4708](https://github.com/phase-rs/phase/issues/4708#issuecomment-4910503855)
+  (can't close directly — no repo permissions).
 
 ### [feature] Theme Pack system (bundled, per-deployment branding)
 

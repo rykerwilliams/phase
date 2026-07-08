@@ -1,5 +1,6 @@
 mod abigale_integration;
 mod abundance_optional_draw_replacement;
+mod ad_nauseam_repeat;
 mod adapter_contract_fixtures;
 mod advanced_reconstruction_regression;
 mod ajani_nacatl_pariah_transform;
@@ -422,6 +423,7 @@ mod issue_4836_mindskinner;
 mod issue_4921_skullscorch_unless_deal_damage;
 mod issue_4962_volo_guide_to_monsters;
 mod issue_5145_violent_eruption_choose_target_distribution;
+mod issue_5159_attacks_alone_investigate;
 mod issue_536_six_grants_retrace;
 mod issue_541_endurance_graveyard_to_bottom;
 mod issue_544_krark_clan_ironworks_auto_pass;

@@ -36,15 +36,16 @@ use super::oracle_util::{
     strip_reminder_text, TextPair, SELF_REF_PARSE_ONLY_PHRASES,
 };
 use crate::parser::oracle_ir::diagnostic::OracleDiagnostic;
+use crate::types::ability::ManaProduction;
 use crate::types::ability::{
     AbilityCost, AbilityDefinition, AbilityKind, AbilityTag, AttachmentKind,
     AttackersDeclaredCountSubject, CastManaObjectScope, CastManaSpentMetric, CastVariantPaid,
     CoinFlipResult, Comparator, ControllerRef, CountScope, CounterTriggerFilter, DamageKindFilter,
     DestinationConstraint, DieResultFilter, Effect, FilterProp, ObjectScope, OriginConstraint,
     ParsedCondition, PlayerFilter, PlayerScope, PtStat, PtValueScope, QuantityExpr, QuantityRef,
-    RenownSubject, SacrificeAggregateStat, SacrificeCost, SacrificeRequirement, StaticCondition,
-    TapCreaturesRequirement, TargetFilter, TriggerCondition, TriggerConstraint, TriggerDefinition,
-    TypeFilter, TypedFilter, UnlessPayModifier, ZoneChangeClause,
+    RenownSubject, SacrificeAggregateStat, SacrificeCost, SacrificeRequirement, SharedQuality,
+    StaticCondition, TapCreaturesRequirement, TargetFilter, TriggerCondition, TriggerConstraint,
+    TriggerDefinition, TypeFilter, TypedFilter, UnlessPayModifier, ZoneChangeClause,
 };
 use crate::types::card_type::{is_land_subtype, CoreType};
 use crate::types::counter::CounterType;
@@ -1549,6 +1550,7 @@ pub(crate) fn lower_trigger_ir(ir: &TriggerIr) -> TriggerDefinition {
             && !execute.optional_targeting
         {
             lift_parent_target_to_triggering_source_in_ability(execute);
+            lift_shared_quality_parent_target_to_triggering_source_in_ability(execute);
         }
     }
 
@@ -1640,6 +1642,110 @@ fn lift_parent_target_to_triggering_source_in_ability(ability: &mut AbilityDefin
         }
         lift_parent_target_to_triggering_source(link.effect.as_mut());
         node = link.sub_ability.as_deref_mut();
+    }
+}
+
+fn lift_shared_quality_parent_target_to_triggering_source_in_ability(
+    ability: &mut AbilityDefinition,
+) {
+    lift_shared_quality_parent_target_to_triggering_source(ability.effect.as_mut());
+    if let Some(sub) = ability.sub_ability.as_deref_mut() {
+        lift_shared_quality_parent_target_to_triggering_source_in_ability(sub);
+    }
+    if let Some(else_ability) = ability.else_ability.as_deref_mut() {
+        lift_shared_quality_parent_target_to_triggering_source_in_ability(else_ability);
+    }
+}
+
+fn lift_shared_quality_parent_target_to_triggering_source(effect: &mut Effect) {
+    if let Effect::Mana { produced, .. } = effect {
+        lift_mana_production_quantities_to_triggering_source(produced);
+    }
+}
+
+fn lift_mana_production_quantities_to_triggering_source(produced: &mut ManaProduction) {
+    match produced {
+        ManaProduction::Colorless { count }
+        | ManaProduction::AnyOneColor { count, .. }
+        | ManaProduction::AnyCombination { count, .. }
+        | ManaProduction::ChosenColor { count, .. }
+        | ManaProduction::OpponentLandColors { count }
+        | ManaProduction::AnyCombinationOfObjectColors { count, .. }
+        | ManaProduction::AnyTypeProduceableBy { count, .. }
+        | ManaProduction::AnyInCommandersColorIdentity { count, .. }
+        | ManaProduction::AnyOneColorAmongPermanents { count, .. } => {
+            lift_quantity_expr_shared_quality_parent_target_to_triggering_source(count);
+        }
+        ManaProduction::Fixed { .. }
+        | ManaProduction::Mixed { .. }
+        | ManaProduction::ChoiceAmongExiledColors { .. }
+        | ManaProduction::ChoiceAmongCombinations { .. }
+        | ManaProduction::DistinctColorsAmongPermanents { .. }
+        | ManaProduction::TriggerEventManaType => {}
+    }
+}
+
+fn lift_quantity_expr_shared_quality_parent_target_to_triggering_source(expr: &mut QuantityExpr) {
+    match expr {
+        QuantityExpr::Ref { qty } => {
+            lift_quantity_ref_shared_quality_parent_target_to_triggering_source(qty);
+        }
+        QuantityExpr::DivideRounded { inner, .. }
+        | QuantityExpr::Offset { inner, .. }
+        | QuantityExpr::ClampMin { inner, .. }
+        | QuantityExpr::Multiply { inner, .. }
+        | QuantityExpr::UpTo { max: inner }
+        | QuantityExpr::Power {
+            exponent: inner, ..
+        } => lift_quantity_expr_shared_quality_parent_target_to_triggering_source(inner),
+        QuantityExpr::Difference { left, right } => {
+            lift_quantity_expr_shared_quality_parent_target_to_triggering_source(left);
+            lift_quantity_expr_shared_quality_parent_target_to_triggering_source(right);
+        }
+        QuantityExpr::Sum { exprs } | QuantityExpr::Max { exprs } => {
+            for inner in exprs {
+                lift_quantity_expr_shared_quality_parent_target_to_triggering_source(inner);
+            }
+        }
+        QuantityExpr::Fixed { .. } => {}
+    }
+}
+
+fn lift_quantity_ref_shared_quality_parent_target_to_triggering_source(qty: &mut QuantityRef) {
+    match qty {
+        QuantityRef::ObjectCount { filter }
+        | QuantityRef::ObjectCountBySharedQuality { filter, .. } => {
+            lift_filter_shared_quality_parent_target_to_triggering_source(filter);
+        }
+        _ => {}
+    }
+}
+
+fn lift_filter_shared_quality_parent_target_to_triggering_source(filter: &mut TargetFilter) {
+    match filter {
+        TargetFilter::Typed(typed) => {
+            for prop in &mut typed.properties {
+                if let FilterProp::SharesQuality {
+                    quality: SharedQuality::CreatureType,
+                    reference: Some(reference),
+                    ..
+                } = prop
+                {
+                    if matches!(reference.as_ref(), TargetFilter::ParentTarget) {
+                        **reference = TargetFilter::TriggeringSource;
+                    }
+                }
+            }
+        }
+        TargetFilter::Or { filters } | TargetFilter::And { filters } => {
+            for filter in filters {
+                lift_filter_shared_quality_parent_target_to_triggering_source(filter);
+            }
+        }
+        TargetFilter::Not { filter } => {
+            lift_filter_shared_quality_parent_target_to_triggering_source(filter);
+        }
+        _ => {}
     }
 }
 
@@ -8168,6 +8274,17 @@ fn strip_attack_unblocked_qualifier(after: &str) -> (bool, &str) {
     (false, after)
 }
 
+/// CR 506.5: Strip a trailing " alone" qualifier from attack trigger event
+/// text ("attacks alone", Exalted / Sharon Carter class). Encoded as
+/// `Not(MinCoAttackers { minimum: 1 })` — zero same-controller co-attackers.
+fn strip_attack_alone_qualifier(after: &str) -> (bool, &str) {
+    if let Ok((rest, _)) = tag::<_, _, OracleError<'_>>(" alone").parse(after) {
+        (true, rest)
+    } else {
+        (false, after)
+    }
+}
+
 /// Try to parse an event verb and build a TriggerDefinition from subject + event.
 fn try_parse_event(
     subject: &TargetFilter,
@@ -8460,6 +8577,7 @@ fn try_parse_event(
         });
     if let Some(after) = attacks_result {
         let (attacks_and_unblocked, after) = strip_attack_unblocked_qualifier(after);
+        let (attacks_alone, after) = strip_attack_alone_qualifier(after);
         // CR 508.3a: Detect attack target qualifier ("attacks a planeswalker" etc.)
         fn parse_attack_target(input: &str) -> OracleResult<'_, AttackTargetFilter> {
             alt((
@@ -8525,6 +8643,15 @@ fn try_parse_event(
         ) && tag::<_, _, OracleError<'_>>(" you").parse(after).is_ok()
         {
             def.valid_target = Some(TargetFilter::Controller);
+        }
+        if attacks_alone {
+            // CR 506.5: attacks alone — zero same-controller co-attackers.
+            def.condition = Some(TriggerCondition::Not {
+                condition: Box::new(TriggerCondition::MinCoAttackers {
+                    minimum: 1,
+                    filter: None,
+                }),
+            });
         }
         let mode = def.mode.clone();
         return Some((mode, def));
@@ -11523,6 +11650,22 @@ fn build_controlled_subtype_filters(
 // Category parsers
 // ---------------------------------------------------------------------------
 
+/// CR 303.4e: nom combinator for the "enchanted [creature|permanent]'s controller"
+/// possessive that scopes an Aura phase trigger to the controller of the permanent
+/// the source is attached to. Composed along its grammar axes — the fixed
+/// `enchanted ` lead, the object-kind alternation (`creature`/`permanent`), the
+/// possessive apostrophe (ASCII `'s` or curly `’s`), and the `controller` head —
+/// rather than enumerating the cartesian product of literals, so a new object-kind
+/// sibling is a single `alt()` arm. Matched at any word boundary by the caller
+/// because the phrase trails the phase noun ("the upkeep of …").
+fn parse_enchanted_controller_phrase(input: &str) -> OracleResult<'_, ()> {
+    let (input, _) = tag("enchanted ").parse(input)?;
+    let (input, _) = alt((tag("creature"), tag("permanent"))).parse(input)?;
+    let (input, _) = alt((tag("'s"), tag("\u{2019}s"))).parse(input)?;
+    let (input, _) = tag(" controller").parse(input)?;
+    Ok((input, ()))
+}
+
 /// Parse phase triggers: "At the beginning of your upkeep/end step/combat/draw step"
 fn try_parse_phase_trigger(lower: &str) -> Option<(TriggerMode, TriggerDefinition)> {
     // CR 511.2: "at end of combat" triggers as the end of combat step begins.
@@ -11578,6 +11721,21 @@ fn try_parse_phase_trigger(lower: &str) -> Option<(TriggerMode, TriggerDefinitio
     };
     if scan_contains(phase_text, "enchanted player's") {
         def.valid_target = Some(TargetFilter::AttachedTo);
+    }
+    // CR 303.4e + CR 109.4 + CR 503.1: "the upkeep of enchanted creature's
+    // controller" (Super Intelligence) / "enchanted permanent's controller" —
+    // the turn-owner scope is the controller of the permanent this Aura is
+    // attached to, which per CR 303.4e may differ from the Aura's controller.
+    // `ParentTargetController` resolves to the attached permanent's controller
+    // for Aura phase triggers. Without this scope the phase trigger has no
+    // player constraint and fires on EVERY player's phase — a Howling-Mine
+    // over-fire (issue #5275). The phrase is composed along its axes
+    // (`enchanted` + object kind + possessive) and matched at any word boundary
+    // (it trails the phase noun, e.g. "the upkeep of …").
+    else if nom_primitives::scan_at_word_boundaries(phase_text, parse_enchanted_controller_phrase)
+        .is_some()
+    {
+        def.valid_target = Some(TargetFilter::ParentTargetController);
     }
     if scan_contains(phase_text, "chosen player's")
         || scan_contains(phase_text, "chosen player\u{2019}s ")

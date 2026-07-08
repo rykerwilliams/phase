@@ -1376,10 +1376,13 @@ fn trigger_attacks_or_blocks_attach_any_number_optional_targeting() {
         .execute
         .as_deref()
         .expect("attach body must lower to an execute ability");
-    assert!(
-        matches!(execute.effect.as_ref(), Effect::Attach { .. }),
-        "expected Attach effect, got {:?}",
-        execute.effect
+    let Effect::Attach { target, .. } = execute.effect.as_ref() else {
+        panic!("expected Attach effect, got {:?}", execute.effect);
+    };
+    assert_eq!(
+        *target,
+        TargetFilter::TriggeringSource,
+        "attached-subject 'to it' must bind to the triggering enchanted creature"
     );
     assert_eq!(
         execute.multi_target,
@@ -1408,10 +1411,13 @@ fn trigger_attach_any_number_in_chain_stays_on_attach_node() {
         .sub_ability
         .as_deref()
         .expect("attach must be chained after draw");
-    assert!(
-        matches!(attach.effect.as_ref(), Effect::Attach { .. }),
-        "expected Attach sub-ability, got {:?}",
-        attach.effect
+    let Effect::Attach { target, .. } = attach.effect.as_ref() else {
+        panic!("expected Attach sub-ability, got {:?}", attach.effect);
+    };
+    assert_eq!(
+        *target,
+        TargetFilter::TriggeringSource,
+        "attached-subject chained 'to it' must bind to the triggering enchanted creature"
     );
     assert_eq!(
         attach.multi_target,
@@ -1777,7 +1783,16 @@ fn trigger_first_combat_phase_followup_condition() {
             "Whenever a Samurai or Warrior you control attacks alone, untap it. If it's the first combat phase of the turn, there is an additional combat phase after this phase.",
             "A-Raiyuu, Storm's Edge",
         );
-    assert!(def.condition.is_none());
+    assert_eq!(
+        def.condition,
+        Some(TriggerCondition::Not {
+            condition: Box::new(TriggerCondition::MinCoAttackers {
+                minimum: 1,
+                filter: None,
+            }),
+        }),
+        "attacks alone gates the main trigger; first-combat-phase is on the follow-up"
+    );
     let followup = def
         .execute
         .as_ref()
@@ -3152,10 +3167,14 @@ fn trigger_enters_or_creature_it_haunts_dies_stays_compound() {
     assert_eq!(triggers[0].mode, TriggerMode::EntersOrHauntedCreatureDies);
     assert_eq!(triggers[0].destination, Some(Zone::Battlefield));
     assert_eq!(triggers[0].valid_card, Some(TargetFilter::SelfRef));
-    assert!(triggers[0]
-        .execute
-        .as_ref()
-        .is_some_and(|a| matches!(a.effect.as_ref(), Effect::Bounce { .. })));
+    assert!(triggers[0].execute.as_ref().is_some_and(|a| matches!(
+        a.effect.as_ref(),
+        Effect::ChangeZone {
+            origin: Some(Zone::Graveyard),
+            destination: Zone::Hand,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -4809,6 +4828,39 @@ fn parse_angel_of_destiny_end_step_loss_issue_1599() {
     );
 }
 
+/// CR 301.5a + CR 603.6a + CR 608.2c: Cloud, Ex-SOLDIER — ETB trigger attaches
+/// the selected Equipment to Cloud itself. The only printed target is the
+/// Equipment being attached; if "to it" lowers to `ParentTarget`, resolution
+/// tries to attach that Equipment to itself and the effect no-ops after target
+/// selection.
+#[test]
+fn parse_cloud_ex_soldier_etb_attach_targets_self() {
+    let def = parse_trigger_line(
+        "When ~ enters, attach up to one target Equipment you control to it.",
+        "Cloud, Ex-SOLDIER",
+    );
+
+    let execute = def.execute.as_deref().expect("execute must be Some");
+    let Effect::Attach { attachment, target } = &*execute.effect else {
+        panic!("expected Attach, got {:?}", execute.effect);
+    };
+    assert_eq!(
+        *attachment,
+        TargetFilter::Typed(
+            TypedFilter::default()
+                .subtype("Equipment".to_string())
+                .controller(ControllerRef::You)
+        )
+    );
+    assert_eq!(*target, TargetFilter::SelfRef);
+    assert_eq!(
+        execute.multi_target,
+        Some(crate::types::ability::MultiTargetSpec::up_to(
+            QuantityExpr::Fixed { value: 1 }
+        ))
+    );
+}
+
 /// CR 208.1 + CR 603.4: Cloud, Ex-SOLDIER — attack trigger with a "Then if
 /// ~ has power 7 or greater, …" sub-ability gate. Before the `~ has power N`
 /// grammar branch was added to `parse_source_power_toughness_condition`,
@@ -5238,6 +5290,50 @@ fn shared_animosity_attack_pump_for_each_other_attacker_sharing_type() {
 }
 
 #[test]
+fn mana_echoes_enter_trigger_count_shares_type_with_triggering_creature() {
+    let def = parse_trigger_line(
+        "Whenever another creature enters, add {C} for each creature you control that shares a creature type with it.",
+        "Mana Echoes",
+    );
+    assert_eq!(def.mode, TriggerMode::ChangesZone);
+    let exec = def.execute.as_ref().expect("execute");
+    match &*exec.effect {
+        Effect::Mana {
+            produced: ManaProduction::Colorless { count },
+            ..
+        } => {
+            let QuantityExpr::Ref {
+                qty: QuantityRef::ObjectCount { filter },
+            } = count
+            else {
+                panic!("count should be ObjectCount, got {count:?}");
+            };
+            let TargetFilter::Typed(tf) = filter else {
+                panic!("filter should be typed, got {filter:?}");
+            };
+            let shares = tf.properties.iter().find(|p| {
+                matches!(
+                    p,
+                    FilterProp::SharesQuality {
+                        quality: SharedQuality::CreatureType,
+                        ..
+                    }
+                )
+            });
+            let Some(FilterProp::SharesQuality { reference, .. }) = shares else {
+                panic!("expected SharesQuality, properties: {:?}", tf.properties);
+            };
+            assert_eq!(
+                reference.as_deref(),
+                Some(&TargetFilter::TriggeringSource),
+                "shares-type reference should bind to the entering creature"
+            );
+        }
+        other => panic!("expected colorless mana production, got {other:?}"),
+    }
+}
+
+#[test]
 fn trigger_attacker_it_gets_is_single_target_pump() {
     // CR 608.2c: "Whenever a creature you control attacks, it gets +2/+0 until end of turn."
     // "it" refers to the triggering attacker → single-object TriggeringSource,
@@ -5347,6 +5443,109 @@ fn etb_token_copier_exile_anaphor_binds_created_token() {
                 "{name}: delayed exile must bind the created token (LastCreated), not the entering creature"
             );
         }
+}
+
+/// Molten Echoes (GitHub #4709/#4708): "Whenever a nontoken creature you
+/// control of the chosen type enters, create a token that's a copy of that
+/// creature. That token gains haste. Exile it at the beginning of the next
+/// end step." Distinct from the Flameshadow Conjuring/Inalla analogs above:
+/// the trigger filter carries an extra `IsChosenCreatureType` predicate
+/// (CR 205.3m creature-type restriction resolved against a stored ETB
+/// choice). This asserts the chosen-type filter on the trigger condition
+/// does not disturb the "that token"/"it" anaphor rewriting that binds the
+/// haste grant and delayed exile to `TargetFilter::LastCreated` (the
+/// created token), not to the entering creature that matched the filter.
+#[test]
+fn molten_echoes_chosen_type_filter_preserves_last_created_anaphors() {
+    fn collect<'a>(def: &'a AbilityDefinition, out: &mut Vec<&'a Effect>) {
+        out.push(&def.effect);
+        if let Effect::CreateDelayedTrigger { effect: inner, .. } = &*def.effect {
+            collect(inner, out);
+        }
+        if let Some(sub) = def.sub_ability.as_deref() {
+            collect(sub, out);
+        }
+        if let Some(els) = def.else_ability.as_deref() {
+            collect(els, out);
+        }
+    }
+    fn copy_source(effs: &[&Effect]) -> Option<TargetFilter> {
+        effs.iter().find_map(|e| match e {
+            Effect::CopyTokenOf { target, .. } => Some(target.clone()),
+            _ => None,
+        })
+    }
+    fn exile_target(effs: &[&Effect]) -> Option<TargetFilter> {
+        effs.iter().find_map(|e| match e {
+            Effect::ChangeZone {
+                destination: Zone::Exile,
+                target,
+                ..
+            } => Some(target.clone()),
+            _ => None,
+        })
+    }
+    fn haste_target(effs: &[&Effect]) -> Option<TargetFilter> {
+        effs.iter().find_map(|e| match e {
+            Effect::GenericEffect {
+                static_abilities,
+                target,
+                ..
+            } if static_abilities.iter().any(|static_def| {
+                static_def.affected == Some(TargetFilter::LastCreated)
+                    && static_def.modifications.iter().any(|modification| {
+                        matches!(
+                            modification,
+                            ContinuousModification::AddKeyword {
+                                keyword: Keyword::Haste,
+                            }
+                        )
+                    })
+            }) =>
+            {
+                target.clone()
+            }
+            _ => None,
+        })
+    }
+
+    let text = "Whenever a nontoken creature you control of the chosen type enters, create a token that's a copy of that creature. That token gains haste. Exile it at the beginning of the next end step.";
+    let def = parse_trigger_line(text, "Molten Echoes");
+
+    match &def.valid_card {
+        Some(TargetFilter::Typed(typed)) => {
+            assert!(
+                typed.properties.contains(&FilterProp::IsChosenCreatureType),
+                "expected IsChosenCreatureType prop on the trigger filter, got {:?}",
+                typed.properties
+            );
+            assert!(
+                typed.properties.contains(&FilterProp::NonToken),
+                "expected NonToken prop on the trigger filter, got {:?}",
+                typed.properties
+            );
+        }
+        other => panic!("expected Typed trigger filter, got {other:?}"),
+    }
+
+    let exec = def.execute.as_ref().expect("execute must be Some");
+    let mut effs = Vec::new();
+    collect(exec, &mut effs);
+    assert_eq!(
+        copy_source(&effs),
+        Some(TargetFilter::TriggeringSource),
+        "CopyTokenOf source must stay TriggeringSource (copy the entering creature that matched the chosen-type filter)"
+    );
+    assert_eq!(
+        haste_target(&effs),
+        Some(TargetFilter::LastCreated),
+        "haste grant must bind the created token (LastCreated), not the entering creature"
+    );
+    assert_eq!(
+        exile_target(&effs),
+        Some(TargetFilter::LastCreated),
+        "delayed exile must bind the created token (LastCreated), not the entering creature"
+    );
 }
 
 /// CR 603.7a + CR 118.12a (issue #4369): Ashling, the Limitless — "Whenever
@@ -12565,10 +12764,11 @@ fn trigger_you_fully_unlock_room_self_return_uses_graveyard_zone() {
         def.execute
             .as_deref()
             .map(|ability| ability.effect.as_ref()),
-        Some(Effect::Bounce {
+        Some(Effect::ChangeZone {
+            origin: Some(Zone::Graveyard),
+            destination: Zone::Hand,
             target: TargetFilter::SelfRef,
-            destination: None,
-            selection: BounceSelection::Targeted,
+            ..
         })
     ));
 }
@@ -12585,10 +12785,11 @@ fn trigger_card_name_self_return_uses_graveyard_zone() {
         def.execute
             .as_deref()
             .map(|ability| ability.effect.as_ref()),
-        Some(Effect::Bounce {
+        Some(Effect::ChangeZone {
+            origin: Some(Zone::Graveyard),
+            destination: Zone::Hand,
             target: TargetFilter::SelfRef,
-            destination: None,
-            selection: BounceSelection::Targeted,
+            ..
         })
     ));
 }
@@ -12770,9 +12971,17 @@ fn trigger_samurai_or_warrior_attacks_alone() {
         "Whenever a Samurai or Warrior you control attacks alone, draw a card.",
         "Raiyuu, Storm's Edge",
     );
-    // Now that parse_type_phrase recognizes subtypes ("Samurai", "Warrior"),
-    // the trigger parser correctly identifies this as an Attacks trigger.
     assert!(matches!(def.mode, TriggerMode::Attacks));
+    assert_eq!(
+        def.condition,
+        Some(TriggerCondition::Not {
+            condition: Box::new(TriggerCondition::MinCoAttackers {
+                minimum: 1,
+                filter: None,
+            }),
+        }),
+        "attacks alone must gate on zero co-attackers (CR 506.5)"
+    );
 }
 
 #[test]

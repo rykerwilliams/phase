@@ -71,6 +71,7 @@ import { ChoiceModal } from "../components/modal/ChoiceModal.tsx";
 import { OptionalEffectModalContent } from "../components/modal/OptionalEffectModal.tsx";
 import { OptionalCostModalContent } from "../components/modal/OptionalCostModal.tsx";
 import { ChooseOneOfBranchModal } from "../components/modal/ChooseOneOfBranchModal.tsx";
+import { LifeRedistributionModal } from "../components/modal/LifeRedistributionModal.tsx";
 import { ModeChoiceModal } from "../components/modal/ModeChoiceModal.tsx";
 import { ReplacementModal } from "../components/modal/ReplacementModal.tsx";
 import { TriggerOrderModal } from "../components/modal/TriggerOrderModal.tsx";
@@ -139,9 +140,16 @@ import { SpectatorChrome } from "../components/spectator/SpectatorChrome.tsx";
 import { useSpectatorMode } from "../hooks/useSpectatorMode.ts";
 import { GameProvider } from "../providers/GameProvider.tsx";
 import { useCanActForWaitingState, usePerspectivePlayerId, usePlayerId } from "../hooks/usePlayerId.ts";
-import { abilityChoiceLabel, formatAbilityCost } from "../viewmodel/costLabel.ts";
+import {
+  abilityChoiceLabel,
+  formatAbilityCost,
+  loyaltyBadge,
+  stripLoyaltyCostPrefix,
+} from "../viewmodel/costLabel.ts";
+import { ManaFontIcon } from "../components/icons/ManaFontIcon.tsx";
 import {
   getCastableZoneViewerTarget,
+  getBoardChoiceView,
   getOpponentIds,
   getSeatCount,
   getWaitingForObjectChoiceIds,
@@ -151,6 +159,7 @@ import {
   type ZoneViewerTarget,
 } from "../viewmodel/gameStateView.ts";
 import { gameButtonClass } from "../components/ui/buttonStyles.ts";
+import { GAME_Z_LAYER } from "../constants/ui.ts";
 
 type ZoneRailStyle = CSSProperties & {
   "--card-w": string;
@@ -839,6 +848,10 @@ function GamePageContent({
   // Card-report picker is valid in a live, participating game (never spectate).
   const canReportCard = gameState != null && !isSpectatorMode;
   const canActForWaitingState = useCanActForWaitingState();
+  const boardChoiceLayerActive = useMemo(() => {
+    const choice = getBoardChoiceView(waitingFor, objects);
+    return canActForWaitingState && choice?.player === playerId;
+  }, [canActForWaitingState, objects, playerId, waitingFor]);
   const helpSheetOpen = useUiStore((s) => s.helpSheetOpen);
   const setHelpSheetOpen = useUiStore((s) => s.setHelpSheetOpen);
   const dismissedFlowHelpNudge = usePreferencesStore((s) => s.dismissedFlowHelpNudge);
@@ -1267,9 +1280,12 @@ function GamePageContent({
 
       <DebugModeBanner />
 
-      {/* Full-screen board layout — CSS Grid with 3 rows: opp hand, battlefield, player hand */}
+      {/* Full-screen board layout — CSS Grid with 3 rows: opp hand, battlefield, player hand.
+          Board choices lift the grid above normal HUD rails, but must stay below
+          DialogHost/TargetingOverlay so confirm controls are not hidden behind
+          the player hand. Keep this ordering in GAME_Z_LAYER. */}
       <div
-        className={`relative z-10 grid min-w-0 h-full${isReconnecting ? " pointer-events-none" : ""}`}
+        className={`relative ${boardChoiceLayerActive && !isReconnecting ? GAME_Z_LAYER.boardChoiceGrid : GAME_Z_LAYER.board} grid min-w-0 h-full${isReconnecting ? " pointer-events-none" : ""}`}
         style={{
           paddingTop: "var(--game-top-overlay-offset, 0px)",
           gridTemplateRows,
@@ -1678,6 +1694,7 @@ function GamePageContent({
         <PermanentTypeSlotModal />
         <ModeChoiceModal />
         <ChooseOneOfBranchModal />
+        <LifeRedistributionModal />
         <AdventureCastModal />
         <CascadeChoiceModal />
         <SpellbookDraftModal />
@@ -2816,6 +2833,29 @@ function AbilityChoiceModal() {
           objects,
           webSlingingCosts,
         );
+        // CR 606.1: prefix a loyalty badge for planeswalker ability costs,
+        // reading the structured Loyalty cost (never parsing the label string).
+        const ability =
+          action.type === "ActivateAbility"
+            ? obj.abilities[action.data.ability_index]
+            : undefined;
+        const badge = loyaltyBadge(ability?.cost);
+        if (badge) {
+          return {
+            id: String(i),
+            label: stripLoyaltyCostPrefix(label),
+            description,
+            // No `size`: mana-font scales the loyalty glyph off the parent's
+            // font-size (font-size:1.5em), so it inherits the option row size.
+            icon: (
+              <ManaFontIcon
+                iconClass={badge.iconClasses}
+                fallbackText={badge.text}
+                label={badge.text}
+              />
+            ),
+          };
+        }
         return { id: String(i), label, description };
       })}
       onChoose={(id) => {

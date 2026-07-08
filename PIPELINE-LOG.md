@@ -184,6 +184,28 @@ not as a scientific benchmark.
     mine would have), and raise any remaining technical disagreement
     (a possible CR 113.6b gap in their fix) as a PR discussion point, not
     an assertion. See `feedback_defer_to_maintainer_commits.md` in memory.
+14. **Multiple CI jobs failing together, including a cross-target compile
+    check (WASM), is the tell for a workspace compile error — not N
+    independent test failures.** On PR #5381, a maintainer's own commit
+    (`ad7ec9c22`, fixing the `phase-ai` regression from lesson-13's
+    incident) called `Definitions::iter_all`, `pub(crate)` in `engine`
+    and invisible from `phase-ai` — an E0624 compile error. This failed
+    Rust lint, both Rust test shards, WASM compile, *and* the
+    Decision-cost perf gate simultaneously, because all of them build the
+    same workspace before running anything job-specific. Recognized the
+    pattern from the shape of the failure list (a compile-only job like
+    WASM doesn't fail from a test assertion) rather than reading each
+    job's logs individually. Fixed by swapping to the existing public
+    `iter_unchecked` accessor (same semantics, meant for exactly this
+    external-crate classification use). Operationally: `gh run view
+    --log-failed` / `--log` on a job ID returns "still in progress" until
+    every job in the run finishes, even if the specific job already shows
+    `fail` — use `gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs`
+    instead to pull one job's log directly without waiting on siblings.
+    Also: `ScheduleWakeup` firing appears to kill an in-flight background
+    `Bash` verification build rather than just checking on it — for a
+    long local cargo check/clippy run, let it complete via its natural
+    task-notification instead of scheduling a wakeup over it.
 
 ---
 

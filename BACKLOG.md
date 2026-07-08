@@ -1015,7 +1015,7 @@ so there's a record of what's already been resolved.
 
 ### [bug-fix] Underworld Breach's own escape grant applying to itself off-battlefield (GitHub #1033) — real bug, fixed via #5350 + #5381
 
-- **Status:** done — real bug, fixed (not "already fixed" as originally concluded)
+- **Status:** done — real bug, fixed and merged (#5350 + #5381, not "already fixed" as originally concluded)
 - **Source:** GitHub issue [phase-rs/phase#1033](https://github.com/phase-rs/phase/issues/1033),
   surfaced via a Vintage-relevance sweep of unclaimed `[Card Bug]` issues.
 - **Point 1** ("exile 0/0, cast goes through anyway") confirmed already
@@ -1059,6 +1059,30 @@ so there's a record of what's already been resolved.
 - **Lesson:** "verify locally" cuts both ways — the same discipline that
   catches a false "already fixed" claim can also *reveal* a real bug
   behind one. See `PIPELINE-LOG.md` standing lessons 11–13.
+- **#5381 CI/review saga after initial push:**
+  1. `matthewevans` CHANGES_REQUESTED (commit `ad7ec9c22`): `compute_combat_tax`'s
+     outer command-zone gate was emblem-only (`!source_obj.is_emblem`),
+     silently dropping legitimate non-emblem command-zone opt-in sources
+     (planes/schemes/conspiracies). Fixed by swapping in
+     `object_sources_static_from_command_zone` (commit `e865c5444`),
+     matching the admission rule every other command-zone gather already
+     used; added a positive+negative test pair, live-revert-proven.
+  2. Same review round, `matthewevans` also pushed `ad7ec9c22` directly to
+     the PR branch — a fix to the `phase-ai` regression I'd caused (CR
+     113.6g Stack-only gate broke `spell_can_be_countered`'s predictive
+     check on hand-resident spells). That commit called
+     `Definitions::iter_all`, which is `pub(crate)` in the `engine` crate
+     and not visible from `phase-ai` — broke the workspace build (E0624),
+     failing Rust lint, both test shards, WASM compile, and the
+     Decision-cost perf gate simultaneously (the tell that it was a
+     compile error, not a real test failure). Fixed by swapping to the
+     existing public `iter_unchecked` (identical semantics, intended for
+     exactly this classification/prediction use outside the engine
+     crate) — commit `d62d02d80`. Verified locally with `cargo check`/
+     `cargo clippy -D warnings` on the affected crates before pushing
+     (Tilt wasn't running in this worktree).
+  3. All CI green after `d62d02d80`; `matthewevans` approved against that
+     commit and merged. **#5381 merged 2026-07-08.**
 
 ### [bug-fix] ~~Pact of Negation doesn't lose the game on unpaid deferred cost~~ — already fixed (GitHub #1058)
 

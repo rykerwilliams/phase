@@ -35,7 +35,7 @@ jobs:
       - name: Set up SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2222' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2223' }}
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
@@ -48,7 +48,7 @@ jobs:
         env:
           DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2222' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2223' }}
           IMAGE: ${{ steps.version.outputs.image }}
         run: |
           SSH="ssh -p $DEPLOY_PORT -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST"
@@ -67,12 +67,14 @@ jobs:
         env:
           DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2222' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2223' }}
           IMAGE: ${{ steps.version.outputs.image }}
+          PHASE_ADMIN_TOKEN: ${{ secrets.PHASE_ADMIN_TOKEN }}
         run: |
           ssh -p "$DEPLOY_PORT" -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" bash << ENDSSH
           set -euo pipefail
           IMAGE="$IMAGE"
+          ADMIN_TOKEN="$PHASE_ADMIN_TOKEN"
 
           echo "Pulling \$IMAGE..."
           docker pull "\$IMAGE"
@@ -84,11 +86,12 @@ jobs:
           docker run -d \
             --name phase-server \
             --restart unless-stopped \
-            -p 127.0.0.1:9374:9374 \
+            -p 9374:9374 \
             -v phase-server-data:/var/lib/phase-server \
             -e PHASE_LOBBY_ONLY=true \
             -e PHASE_CORS_ORIGIN='*' \
             -e RUST_LOG=info \
+            -e PHASE_ADMIN_TOKEN="\$ADMIN_TOKEN" \
             "\$IMAGE"
 
           echo "Checking health..."

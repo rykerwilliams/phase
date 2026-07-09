@@ -1,0 +1,134 @@
+name: Build and Deploy Frontend
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Upstream release tag to build (e.g. v0.5.0). Leave blank for latest.'
+        required: false
+        default: ''
+
+jobs:
+  build-and-deploy:
+    name: Build WASM + Frontend → EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Resolve upstream version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION=$(curl -fsSL "https://api.github.com/repos/phase-rs/phase/releases/latest" \
+              | jq -r .tag_name)
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building: $VERSION"
+
+      - uses: actions/checkout@v4
+
+      - name: Checkout upstream release tag
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+        run: |
+          git fetch --depth=1 https://github.com/phase-rs/phase.git \
+            "refs/tags/$VERSION:refs/tags/$VERSION"
+          git checkout "$VERSION"
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-unknown-unknown
+          cache-shared-key: rust-wasm
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.121
+
+      - name: Cache binaryen
+        id: binaryen-cache
+        uses: actions/cache@v4
+        with:
+          path: binaryen-version_123
+          key: binaryen-123-x86_64-linux
+
+      - name: Install binaryen
+        if: steps.binaryen-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -L https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz \
+            | tar xz
+
+      - name: Add binaryen to PATH
+        run: echo "$PWD/binaryen-version_123/bin" >> $GITHUB_PATH
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: client/pnpm-lock.yaml
+
+      - name: Resolve upstream card-data URL
+        id: card-data
+        run: |
+          HASH=$(curl -fsSL --compressed "https://data.phase-rs.dev/coverage-data.json" \
+            | jq -r '.card_data_hash // empty')
+          if [ -n "$HASH" ]; then
+            echo "url=https://data.phase-rs.dev/card-data-$HASH.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://data.phase-rs.dev/card-data.json" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build WASM
+        run: ./scripts/build-wasm.sh release
+
+      - name: Build frontend
+        env:
+          DATA_BASE_URL: "https://data.phase-rs.dev"
+          CARD_DATA_URL: ${{ steps.card-data.outputs.url }}
+          DEFAULT_MULTIPLAYER_SERVER_URL: "wss://phase.teamserio.us/ws"
+        run: |
+          cd client
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - name: Set up SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2223' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload frontend to EC2
+        env:
+          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2223' }}
+          VERSION: ${{ steps.version.outputs.tag }}
+        run: |
+          SSH="ssh -p $DEPLOY_PORT -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST"
+          $SSH "rm -rf /frontend-www/* && mkdir -p /frontend-www"
+          tar -czf - -C client/dist . \
+            | $SSH "tar -xzf - -C /frontend-www"
+          echo "Uploaded frontend $VERSION to /frontend-www"
+
+      - name: Summary
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+          CARD_DATA_URL: ${{ steps.card-data.outputs.url }}
+        run: |
+          {
+            echo "### Frontend Deploy"
+            echo "- **Version**: $VERSION"
+            echo "- **Server**: wss://phase.teamserio.us/ws"
+            echo "- **Card data**: $CARD_DATA_URL"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1428,3 +1428,104 @@ so there's a record of what's already been resolved.
   compile success, before trusting it.
 - **PR:** [phase-rs/phase#5360](https://github.com/phase-rs/phase/pull/5360)
   (15698 passed, 0 failed, 0 regressions; clippy clean).
+
+### [bug-fix] Animate Dead / Dance of the Dead reanimation (GitHub #4767) — real bug, two compounding root causes, fixed
+
+- **Status:** done — PR open, CI in progress
+- **Source:** GitHub issue [phase-rs/phase#4767](https://github.com/phase-rs/phase/issues/4767),
+  surfaced via the Scryfall-sets ∩ open-issues sweep for 1993-95-era cards.
+- **Two compounding bugs, not one:** (1) the ETB reanimation effect text
+  was never recognized by the parser at all (fell to `Unimplemented`/
+  absorbed into the wrong clause); (2) a separate, previously-undiscovered
+  prerequisite — the Aura could never successfully attach to its own
+  graveyard-zone cast-time target in the first place, because two
+  resolution-path checks (`ability_utils.rs::validate_targets_in_chain`'s
+  generic fallback, `stack.rs`'s CR-annotated Aura-attach block) hardcoded
+  "target must be on the battlefield" instead of consulting the Aura's own
+  zone-scoped `Enchant` filter. Fixing only the parser bug would have
+  changed nothing observable — the spell fizzled to the graveyard before
+  the ETB trigger ever got a chance to exist.
+- **Fix, three layers:** (1) runtime — new `TargetFilter::OriginalSource`
+  variant (an ability's pre-`forward_result`-rebind source identity,
+  concretized eagerly in-place at the one point pre-rebind `source_id` and
+  the about-to-mutate sub-ability clone coexist), a companion
+  `Keyword::Enchant(ParentTarget)`→`SpecificObject` concretization, a
+  Sacrifice controller-scope fix so "that creature's controller sacrifices
+  it" uses the creature's *current* controller, and a `parent_target_snapshot`
+  fix (delayed-trigger infra) so the delayed sacrifice snapshots the
+  reanimated creature, not the departing Aura; (2) parser — a new
+  whole-body, fail-closed recognizer building the
+  `ChangeZone→GenericEffect→Attach→CreateDelayedTrigger` chain directly,
+  generalized over the class's verb/destination axis (Animate Dead's
+  "return...to the battlefield" / Dance of the Dead's "put...onto the
+  battlefield tapped"); (3) the initial-attach prerequisite, fixed
+  generically (not just for this card) by routing both checks through the
+  Aura's own `Enchant` filter via existing authorities
+  (`aura_enchant_filter`, `sba::is_valid_attachment_target`) — this also
+  fixes every other zone-scoped Enchant Aura (e.g. Spellweaver Volute).
+- **Process note:** this went through an extraordinarily long
+  plan→review loop (6 rounds on the runtime/`OriginalSource` architecture
+  alone, then 4 more rounds on the parser composition after the runtime
+  work was already implemented) — multiple rounds independently "confirmed
+  correct" an `Attach{attachment: OriginalSource}` design nested directly
+  under `ChangeZone` before a later round found, by direct hand-trace (not
+  agent-reported), a dramatically simpler architecture: nesting the
+  keyword-swap `GenericEffect` as `ChangeZone`'s direct sub-ability (where
+  it legitimately needs `OriginalSource`) and leaving `Attach` one level
+  deeper (as `GenericEffect`'s sub), where it's never rebound at all and
+  plain `SelfRef`/`ParentTarget` just work — eliminating an entire class of
+  runtime fixes the earlier rounds had converged on. The initial-attach
+  prerequisite bug was found only because the implementation-executor
+  insisted on driving the *real* cast pipeline rather than trusting the
+  parser/runtime fixes' unit tests alone — a second reminder (after
+  Underworld Breach) that "verify locally" via the real production path,
+  not just isolated unit tests, is what actually catches compounding bugs.
+- **PR:** [phase-rs/phase#5449](https://github.com/phase-rs/phase/pull/5449).
+
+### [investigate] Necromancy — same reanimator-Aura family, different effect shape, NOT fixed by #5449
+
+- **Status:** open, not started
+- **Source:** GitHub issue [phase-rs/phase#640](https://github.com/phase-rs/phase/issues/640)
+  ("Necromancy aura does nothing"), raised by the user while #4767 was in
+  flight, asking whether the Animate Dead fix would cover it.
+- **Confirmed it does not.** Necromancy's Oracle text is structurally
+  different from Animate Dead/Dance of the Dead: it's cast as a plain
+  Enchantment (no `Enchant` keyword, no pre-ETB Aura-ness), and its ETB
+  trigger makes it *become* an Aura ("it becomes an Aura with 'enchant
+  creature put onto the battlefield with Necromancy.'"), targeting a
+  creature card as an ordinary spell target rather than via
+  Enchant-keyword-restricted casting. This is the `Effect::ReturnAsAura`
+  shape already built for Old-Growth Troll/Bronzehide Lion/Harold and Bob
+  — a different building block than the `ChangeZone→GenericEffect→Attach→
+  CreateDelayedTrigger` chain #5449 built.
+- **Next step:** a separately-scoped fix reusing `Effect::ReturnAsAura` +
+  the existing "becomes an Aura with quoted text" recognizer family
+  (`oracle_nom/return_as_aura.rs`). Not started.
+
+### [investigate] "Enchantment Auras are not going to graveyard if the permanent they were attached to is exiled" — could not reproduce with a minimal repro
+
+- **Status:** investigated, inconclusive — needs a real repro
+- **Source:** user-reported (recent bug report, not yet a filed GitHub
+  issue as of this investigation — searched open issues, Discord-sourced
+  issues, and closed issues for "aura"/"exile"/"graveyard" combinations,
+  found nothing matching).
+- **Investigated 2026-07-09:** wrote a direct unit test (Pacifism-shape
+  Aura attached to a creature, creature moved to `Zone::Exile` via
+  `zones::move_to_zone`, then `check_state_based_actions` called
+  explicitly) mirroring the existing, passing
+  `sba_aura_still_goes_to_graveyard_when_target_leaves` test (which covers
+  the "creature dies" case). The exile case **passed** — the Aura
+  correctly detached and went to its owner's graveyard (CR 704.5m) for
+  this minimal scenario. `move_to_zone` is a single unified function for
+  every zone destination (not separate graveyard-only vs exile-only
+  plumbing), so there's no structural reason to expect exile specifically
+  to behave differently from destroy/bounce — confirmed by this test.
+- **Conclusion:** the reported symptom could not be reproduced at the SBA
+  layer with a direct, minimal test. If real, the bug is likely
+  scenario-specific (a particular card, a particular exile-triggering
+  effect that doesn't route through the normal SBA-check cadence, a
+  replacement effect interaction, or a UI-only display bug rather than a
+  true engine-state bug) rather than a blanket "exile never triggers Aura
+  cleanup" defect. **Needs a concrete repro (specific cards, steps) before
+  further engine-side investigation is worthwhile** — do not assume this
+  is fixed; also do not assume it's real without a repro.

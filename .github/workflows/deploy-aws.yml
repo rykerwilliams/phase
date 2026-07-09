@@ -1,0 +1,119 @@
+name: Deploy to AWS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to deploy (e.g. v0.5.0). Leave blank for latest upstream release.'
+        required: false
+        default: ''
+  schedule:
+    - cron: '17 * * * *'  # Hourly; checks upstream GHCR for new releases
+
+jobs:
+  deploy:
+    name: Deploy phase-server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION:-}" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION=$(curl -fsSL "https://api.github.com/repos/phase-rs/phase/releases/latest" \
+              | jq -r .tag_name)
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/phase-rs/phase-server:$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved: $VERSION"
+
+      - name: Set up SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2222' }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$DEPLOY_PORT" -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Check running version (scheduled)
+        if: github.event_name == 'schedule'
+        id: running
+        env:
+          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2222' }}
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          SSH="ssh -p $DEPLOY_PORT -i ~/.ssh/deploy_key $DEPLOY_USER@$DEPLOY_HOST"
+          FORMAT='{{.Config.Image}}'
+          CURRENT=$($SSH "docker inspect phase-server --format '$FORMAT' 2>/dev/null || true")
+          if [ "$CURRENT" = "$IMAGE" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Already on $IMAGE — skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Current: ${CURRENT:-none}  →  Target: $IMAGE"
+          fi
+
+      - name: Deploy
+        if: github.event_name != 'schedule' || steps.running.outputs.skip != 'true'
+        env:
+          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '2222' }}
+          IMAGE: ${{ steps.version.outputs.image }}
+        run: |
+          ssh -p "$DEPLOY_PORT" -i ~/.ssh/deploy_key "$DEPLOY_USER@$DEPLOY_HOST" bash << ENDSSH
+          set -euo pipefail
+          IMAGE="$IMAGE"
+
+          echo "Pulling \$IMAGE..."
+          docker pull "\$IMAGE"
+
+          docker stop --time 30 phase-server 2>/dev/null || true
+          docker rm phase-server 2>/dev/null || true
+          docker volume create phase-server-data >/dev/null
+
+          docker run -d \
+            --name phase-server \
+            --restart unless-stopped \
+            -p 127.0.0.1:9374:9374 \
+            -v phase-server-data:/var/lib/phase-server \
+            -e PHASE_LOBBY_ONLY=true \
+            -e PHASE_CORS_ORIGIN='*' \
+            -e RUST_LOG=info \
+            "\$IMAGE"
+
+          echo "Checking health..."
+          for _ in \$(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9374/health; then
+              echo ""
+              docker ps --filter name=phase-server --filter status=running
+              echo "Deploy complete: \$IMAGE"
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs --tail 50 phase-server || true
+          exit 1
+          ENDSSH
+
+      - name: Summary
+        if: always()
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+          SKIP: ${{ steps.running.outputs.skip || 'false' }}
+        run: |
+          {
+            echo "### Deploy"
+            echo "- **Version**: $VERSION"
+            echo "- **Trigger**: ${{ github.event_name }}"
+            [ "$SKIP" = "true" ] && echo "- **Result**: already up to date, skipped"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,78 @@
+# Shared Card-Fix Worklist
+
+Coordination board for concurrent AI agents fixing `phase-rs/phase` cards
+from this fork. Lives only on `rykerwilliams/phase`'s `main` — never
+appears in a PR to `phase-rs/phase` (every fix branch is cut fresh from
+`origin/main`, never from this fork's `main`, so this file is automatically
+excluded from PR diffs, same mechanism as `BACKLOG.md`).
+
+**Read the Rules before touching this file.**
+
+## Rules
+
+1. **Sync first, every time.** `git fetch myfork main && git merge --ff-only myfork/main`
+   immediately before reading or editing this file — it changes constantly
+   and a stale read defeats the whole point.
+2. **Check before claiming.** Only claim a row whose Status is `open`.
+3. **Never take over another agent's claim.** Don't edit a `claimed` or
+   `in-progress` row that isn't yours except to add a short `Note` (e.g.
+   flagging a dependency or a suspected-stale claim). If a claim looks
+   abandoned (claimed long ago, no branch, no visible progress), don't
+   reassign it yourself — leave a note and let a human decide.
+4. **Claim atomically, push immediately.** To claim: set Status to
+   `claimed`, fill in Agent (a short stable name for your session/track) and
+   Claimed-At (date, UTC), commit with message `claim: <item name>`, and
+   `git push myfork main` right away, before starting any other work. Git
+   has no real locking — the only safety margin is how fast you push after
+   checking Status was `open`.
+5. **Handle a rejected push.** If the push is rejected, fetch + merge
+   --ff-only again. If someone else claimed the *same* row in that window,
+   back off and pick a different item — don't fight over it. If the
+   conflict was on an unrelated row, just retry your push.
+6. **Update status as you go.** `claimed` → `in-progress` (fill in Branch)
+   once you've actually started → `done` (fill in PR) once merged, or
+   `blocked` / `abandoned` with a one-line reason if you drop it. Never
+   leave a stale claim with no explanation for the next agent to find.
+7. **Never delete rows.** Move finished/abandoned rows to the "Done" table
+   at the bottom instead, so there's a record of what happened to every
+   item.
+8. **Commit worklist edits separately from code.** A claim/status change is
+   its own small commit — never bundle it into a commit that also contains
+   a card fix's actual code changes.
+9. **Fork-only, forever.** Never reference, quote, or link this file from
+   any PR body to `phase-rs/phase`. It's internal coordination only, exactly
+   like `BACKLOG.md`.
+
+## Open / in-progress
+
+| Item | Track | Status | Agent | Claimed-At | Branch | PR |
+|---|---|---|---|---|---|---|
+| Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/fireball-for-each-cost` | — |
+| Land's Edge — dropped intervening-if (misparse backlog root-cause #2) | old-school-1993-95 | open | — | — | — | — |
+| Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | open | — | — | — | — |
+| Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) | old-school-1993-95 | open | — | — | — | — |
+| Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |
+| Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |
+
+### Observed concurrent worktrees (not self-reported — please fill in real details if one of these is yours)
+
+These rows are inferred purely from existing worktree directory names seen
+in `git worktree list`, not from an actual claim in this file. If any of
+these is your work, please replace the row with real Status/Agent/Branch/PR
+info rather than leaving it as a guess:
+
+| Item (inferred) | Worktree dir |
+|---|---|
+| Circle of Protection family | `card-circle-of-protection-source-choice` |
+| Winter Orb untap restriction | `card-winter-orb-untap-restriction` |
+| Nettling Imp continuity filter | `card-nettling-imp-continuity-filter` |
+| Veteran Bodyguard tap redirect | `card-veteran-bodyguard-tap-redirect` |
+| "Blocks or becomes blocked by" filter | `card-blocks-or-becomes-blocked-by-filter` |
+
+## Done
+
+| Item | Track | PR |
+|---|---|---|
+| Animate Dead / Dance of the Dead reanimation (#4767) | old-school-1993-95 | phase-rs/phase#5449 (merged) |
+| Glasses of Urza reveal-hand (#5251) | old-school-1993-95 | phase-rs/phase#5464 |
+| Maze of Ith untap + bidirectional prevent (#1094) | old-school-1993-95 | phase-rs/phase#5484 (merged) |

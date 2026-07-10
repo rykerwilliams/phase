@@ -46,6 +46,42 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
    any PR body to `phase-rs/phase`. It's internal coordination only, exactly
    like `BACKLOG.md`.
 
+## Cargo build lock
+
+Each worktree has its own `target/` dir (verified — not shared), but
+`~/.cargo`'s package cache/registry *is* shared across every worktree, and
+with ~10 worktrees active concurrently, several agents running
+`cargo build`/`test`/`clippy` at the same moment causes real lock
+contention on that shared cache and can exhaust CPU/RAM (observed:
+`clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
+compile anything and needs no lock.
+
+**Current holder:** `none`
+
+Protocol — before running any compiling cargo command (`build`, `test`,
+`clippy`, `run`, anything that isn't `fmt`):
+
+1. Sync this file first (Rule 1).
+2. If "Current holder" is `none`, claim it: set it to `<agent-name> since <UTC timestamp>`,
+   commit as `cargo-lock: claim (<agent-name>)`, push immediately —
+   before running your command, not after.
+3. If the push is rejected, re-sync and check who holds it now. If someone
+   else claimed it in that window, **wait and retry later** — don't run
+   your cargo command anyway and don't fight over the lock row.
+4. Run your command(s).
+5. The moment you're done (pass or fail), release it: set "Current holder"
+   back to `none`, commit as `cargo-lock: release (<agent-name>)`, push
+   immediately. Don't hold the lock longer than the build/test run itself —
+   don't hold it across a whole multi-step implementation session.
+6. If you find a holder that's been sitting far longer than any real build
+   should take (say 20+ minutes) with no explanation, don't clear it
+   yourself — leave a note and let a human decide, same as a stale item
+   claim.
+
+This is advisory, not a technical lock — it only works if every agent
+actually checks and respects it. Treat holding it like holding a talking
+stick: grab it, do the one thing you needed it for, let go.
+
 ## Open / in-progress
 
 | Item | Track | Status | Agent | Claimed-At | Branch | PR |

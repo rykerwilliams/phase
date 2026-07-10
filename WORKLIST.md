@@ -54,6 +54,7 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
 | Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |
 | Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |
 | Veteran Bodyguard / Weathered Bodyguards — dropped tap-gate + unblocked/combat source restriction on damage redirection | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `worktree-card-veteran-bodyguard-tap-redirect` | — |
+| **[Discovered, engine bug, not misparse]** Damage-redirection `ShieldKind::Prevention` static abilities (Pariah, Palisade Giant, Veteran Bodyguard, Weathered Bodyguards) never actually deal the redirected damage to `redirect_target` — `game/replacement.rs`'s CR 614.9 redirection branch only fires for `ShieldKind::Redirection`, never `ShieldKind::Prevention`, so `redirect_target: SelfRef` is dead data for this whole class. The creature the damage is "redirected to" never takes damage, can never die from it, and never triggers "dealt damage" abilities off it. Confirmed via direct code trace during the Veteran Bodyguard fix (see that PR, once opened, for the exact file:line citations). Needs its own plan+review — touches shared resolver code (`game/replacement.rs`, `damage_done_applier`), affects multiple already-shipped cards. | old-school-1993-95 | open | — | — | — | — |
 
 ## Done
 

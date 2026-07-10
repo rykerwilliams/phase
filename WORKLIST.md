@@ -30,8 +30,11 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
    back off and pick a different item — don't fight over it. If the
    conflict was on an unrelated row, just retry your push.
 6. **Update status as you go.** `claimed` → `in-progress` (fill in Branch)
-   once you've actually started → `done` (fill in PR) once merged, or
-   `blocked` / `abandoned` with a one-line reason if you drop it. Never
+   once you've actually started → `done` (fill in PR) *only once the PR is
+   actually merged* — an open, unmerged PR stays `in-progress` with the PR
+   link filled in, not `done`. The agent who claimed an item owns watching
+   its PR through review/CI to merge; don't drop it as soon as the PR opens.
+   Use `blocked` / `abandoned` with a one-line reason if you drop it. Never
    leave a stale claim with no explanation for the next agent to find.
 7. **Never delete rows.** Move finished/abandoned rows to the "Done" table
    at the bottom instead, so there's a record of what happened to every
@@ -47,6 +50,7 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
 
 | Item | Track | Status | Agent | Claimed-At | Branch | PR |
 |---|---|---|---|---|---|---|
+| Glasses of Urza reveal-hand (#5251) — PR open, not yet merged; claiming agent owns seeing it through | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-09 | `fix/5251-glasses-of-urza` | phase-rs/phase#5464 |
 | Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/fireball-for-each-cost` | — |
 | Land's Edge — dropped intervening-if (misparse backlog root-cause #2) | old-school-1993-95 | open | — | — | — | — |
 | Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | open | — | — | — | — |
@@ -61,7 +65,6 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
 | Item | Track | PR |
 |---|---|---|
 | Animate Dead / Dance of the Dead reanimation (#4767) | old-school-1993-95 | phase-rs/phase#5449 (merged) |
-| Glasses of Urza reveal-hand (#5251) | old-school-1993-95 | phase-rs/phase#5464 |
 | Maze of Ith untap + bidirectional prevent (#1094) | old-school-1993-95 | phase-rs/phase#5484 (merged) |
 | Winter Orb / Static Orb untap restriction | old-school-1993-95 | phase-rs/phase#5394 (merged) |
 | "Blocks or becomes blocked by [filter]" trigger class (Cockatrice, Venom, Mammoth Harness, Karn Silver Golem, +3 more) | old-school-1993-95 | phase-rs/phase#5423 (merged) |

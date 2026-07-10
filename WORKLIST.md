@@ -55,21 +55,6 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
 | Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |
 | Veteran Bodyguard / Weathered Bodyguards — dropped tap-gate + unblocked/combat source restriction on damage redirection | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `worktree-card-veteran-bodyguard-tap-redirect` | — |
 
-### Observed concurrent worktrees (not self-reported — please fill in real details if one of these is yours)
-
-These rows are inferred purely from existing worktree directory names seen
-in `git worktree list`, not from an actual claim in this file. If any of
-these is your work, please replace the row with real Status/Agent/Branch/PR
-info rather than leaving it as a guess:
-
-| Item (inferred) | Worktree dir |
-|---|---|
-| Circle of Protection family | `card-circle-of-protection-source-choice` |
-| Winter Orb untap restriction | `card-winter-orb-untap-restriction` |
-| Nettling Imp continuity filter | `card-nettling-imp-continuity-filter` |
-| Veteran Bodyguard tap redirect | `card-veteran-bodyguard-tap-redirect` |
-| "Blocks or becomes blocked by" filter | `card-blocks-or-becomes-blocked-by-filter` |
-
 ## Done
 
 | Item | Track | PR |
@@ -77,3 +62,7 @@ info rather than leaving it as a guess:
 | Animate Dead / Dance of the Dead reanimation (#4767) | old-school-1993-95 | phase-rs/phase#5449 (merged) |
 | Glasses of Urza reveal-hand (#5251) | old-school-1993-95 | phase-rs/phase#5464 |
 | Maze of Ith untap + bidirectional prevent (#1094) | old-school-1993-95 | phase-rs/phase#5484 (merged) |
+| Winter Orb / Static Orb untap restriction | old-school-1993-95 | phase-rs/phase#5394 (merged) |
+| "Blocks or becomes blocked by [filter]" trigger class (Cockatrice, Venom, Mammoth Harness, Karn Silver Golem, +3 more) | old-school-1993-95 | phase-rs/phase#5423 (merged) |
+| Nettling Imp / Norritt / Arcum's Whistle continuity-controlled target filter | old-school-1993-95 | phase-rs/phase#5463 (merged) |
+| Circle of Protection / Rune of Protection qualified "source of your choice" damage prevention (13 cards) | old-school-1993-95 | phase-rs/phase#5488 (merged) |

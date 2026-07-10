@@ -53,6 +53,7 @@ excluded from PR diffs, same mechanism as `BACKLOG.md`).
 | Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) | old-school-1993-95 | open | — | — | — | — |
 | Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |
 | Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |
+| Veteran Bodyguard / Weathered Bodyguards — dropped tap-gate + unblocked/combat source restriction on damage redirection | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `worktree-card-veteran-bodyguard-tap-redirect` | — |
 
 ### Observed concurrent worktrees (not self-reported — please fill in real details if one of these is yours)
 

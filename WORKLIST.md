@@ -89,7 +89,7 @@ stick: grab it, do the one thing you needed it for, let go.
 | Glasses of Urza reveal-hand (#5251) — PR open, not yet merged; claiming agent owns seeing it through | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-09 | `fix/5251-glasses-of-urza` | phase-rs/phase#5464 |
 | Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/fireball-for-each-cost` | phase-rs/phase#5545 |
 | Fireball — runtime gameplay cost still doesn't scale with target count (separate engine bug, split out of #5545: {X}+distribute casting route locks cost before targets are known, bypassing `apply_target_dependent_cost_modifiers`; affects ~15 cards' payment-mode/convoke/assist access on this route, not just Fireball) | old-school-1993-95 | claimed | rykerwilliams-old-school | 2026-07-10 | — | — |
-| Land's Edge — dropped intervening-if (misparse backlog root-cause #2) | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `worktree-card-lands-edge-intervening-if` | — |
+| Land's Edge — dropped intervening-if (misparse backlog root-cause #2) | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `worktree-card-lands-edge-intervening-if-v2` | phase-rs/phase#5547 |
 | Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | open | — | — | — | — |
 | Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) | old-school-1993-95 | open | — | — | — | — |
 | Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |

@@ -86,7 +86,6 @@ stick: grab it, do the one thing you needed it for, let go.
 
 | Item | Track | Status | Agent | Claimed-At | Branch | PR |
 |---|---|---|---|---|---|---|
-| Glasses of Urza reveal-hand (#5251) — PR open, not yet merged; claiming agent owns seeing it through | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-09 | `fix/5251-glasses-of-urza` | phase-rs/phase#5464 |
 | Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/fireball-for-each-cost` | phase-rs/phase#5545 |
 | Fireball — runtime gameplay cost still doesn't scale with target count (separate engine bug, split out of #5545) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/distribute-x-cost-surcharge-timing` | phase-rs/phase#5556 |
 | Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | open | — | — | — | — |
@@ -103,6 +102,7 @@ stick: grab it, do the one thing you needed it for, let go.
 | Item | Track | PR |
 |---|---|---|
 | Animate Dead / Dance of the Dead reanimation (#4767) | old-school-1993-95 | phase-rs/phase#5449 (merged) |
+| Glasses of Urza reveal-hand (#5251) | old-school-1993-95 | phase-rs/phase#5464 (merged) |
 | Maze of Ith untap + bidirectional prevent (#1094) | old-school-1993-95 | phase-rs/phase#5484 (merged) |
 | Winter Orb / Static Orb untap restriction | old-school-1993-95 | phase-rs/phase#5394 (merged) |
 | "Blocks or becomes blocked by [filter]" trigger class (Cockatrice, Venom, Mammoth Harness, Karn Silver Golem, +3 more) | old-school-1993-95 | phase-rs/phase#5423 (merged) |

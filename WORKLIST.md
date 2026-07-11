@@ -88,7 +88,7 @@ stick: grab it, do the one thing you needed it for, let go.
 |---|---|---|---|---|---|---|
 | Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/fireball-for-each-cost` | phase-rs/phase#5545 |
 | Fireball — runtime gameplay cost still doesn't scale with target count (separate engine bug, split out of #5545) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/distribute-x-cost-surcharge-timing` | phase-rs/phase#5556 |
-| Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | open | — | — | — | — |
+| Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | claimed | rykerwilliams-old-school | 2026-07-11 | — | — |
 | Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) | old-school-1993-95 | open | — | — | — | — |
 | Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |
 | Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |

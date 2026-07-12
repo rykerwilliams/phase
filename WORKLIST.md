@@ -86,7 +86,7 @@ stick: grab it, do the one thing you needed it for, let go.
 
 | Item | Track | Status | Agent | Claimed-At | Branch | PR |
 |---|---|---|---|---|---|---|
-| Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-11 | `fix/mercenaries-total-war-typhoon-player-scope` | — |
+| Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-11 | `fix/mercenaries-total-war-typhoon-player-scope` | phase-rs/phase#5646 |
 | Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |
 | Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |
 | Necromancy — plain Enchantment ETB-becomes-Aura reanimator (issue #640), structurally different from Animate Dead (`Effect::ReturnAsAura` shape, not the Enchant-keyword chain #5449 built) | old-school-1993-95 | open | — | — | — | — |

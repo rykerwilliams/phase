@@ -86,9 +86,6 @@ stick: grab it, do the one thing you needed it for, let go.
 
 | Item | Track | Status | Agent | Claimed-At | Branch | PR |
 |---|---|---|---|---|---|---|
-| Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/fireball-for-each-cost` | phase-rs/phase#5545 |
-| Fireball — runtime gameplay cost still doesn't scale with target count (separate engine bug, split out of #5545) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-10 | `fix/distribute-x-cost-surcharge-timing` | phase-rs/phase#5556 |
-| Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) — PR open, not yet merged | old-school-1993-95 | in-progress | rykerwilliams-old-school | 2026-07-11 | `fix/land-equilibrium-then-clause` | phase-rs/phase#5602 |
 | Mercenaries / Total War / Typhoon — wrong player/controller scope (misparse backlog root-cause #9) | old-school-1993-95 | open | — | — | — | — |
 | Merieke Ri Berit — collapsed "or" disjunction (misparse backlog root-cause #6) | old-school-1993-95 | open | — | — | — | — |
 | Power Leak — mis-modeled dynamic-X prevention (misparse backlog root-cause #11) | old-school-1993-95 | open | — | — | — | — |
@@ -110,3 +107,6 @@ stick: grab it, do the one thing you needed it for, let go.
 | Circle of Protection / Rune of Protection qualified "source of your choice" damage prevention (13 cards) | old-school-1993-95 | phase-rs/phase#5488 (merged) |
 | Veteran Bodyguard / Weathered Bodyguards — dropped tap-gate + unblocked/combat source restriction on damage redirection | old-school-1993-95 | phase-rs/phase#5518 (merged); small follow-up fixing 2 post-merge review comments (wrong CR citation, Pattern 3 dropping as-long-as gate) at phase-rs/phase#5531 |
 | Land's Edge — dropped intervening-if (misparse backlog root-cause #2) | old-school-1993-95 | phase-rs/phase#5547 (merged, test-only -- confirmed the existing CostPaidObjectMatchesFilter building block already handles this card correctly, zero production code changed; reduced from 573 to 114 lines per maintainer review before merge) |
+| Fireball — dynamic "for each" cost dropped (misparse backlog root-cause #5) | old-school-1993-95 | phase-rs/phase#5545 (merged) |
+| Fireball — runtime gameplay cost still doesn't scale with target count (separate engine bug, split out of #5545) | old-school-1993-95 | phase-rs/phase#5556 (merged) |
+| Land Equilibrium — dropped chained "then" clause (misparse backlog root-cause #4) | old-school-1993-95 | phase-rs/phase#5602 (merged) |

@@ -1,4 +1,27 @@
 {
+  "comboShortcut": {
+    "declareTitle": "Loop Shortcut",
+    "declareSubtitle": "You control a loop with a determined outcome. Take the shortcut to resolve it.",
+    "respondTitle": "Loop Shortcut Proposed",
+    "respondSubtitle": "An opponent proposes taking a loop shortcut. Accept it, or break out to keep playing manually.",
+    "confirm": "Take the shortcut",
+    "accept": "Accept",
+    "shorten": "Break out",
+    "decline": "Decline the shortcut",
+    "untilLethal": "Repeat until the game ends.",
+    "fixedCount_one": "Repeat once.",
+    "fixedCount_other": "Repeat {{count}} times.",
+    "convokeInfo_one": "Auto-taps up to 1 creature for convoke each iteration.",
+    "convokeInfo_other": "Auto-taps up to {{count}} creatures for convoke each iteration.",
+    "winKind": {
+      "LethalDamage": "This loop deals lethal damage.",
+      "PoisonLoss": "This loop gives lethal poison counters.",
+      "Decking": "This loop decks an opponent.",
+      "ImmediateWin": "This loop wins the game.",
+      "ExtraTurns": "This loop takes infinite extra turns.",
+      "Advantage": "This loop generates unbounded advantage."
+    }
+  },
   "resolutionProgress": {
     "label": "Rozwiązywanie {{resolved}} / {{total}}",
     "collapse": "Zwiń postęp rozwiązywania",
@@ -278,7 +301,8 @@
     "assignRemaining_one": "Przydziel jeszcze {{count}}",
     "assignRemaining_other": "Przydziel jeszcze {{count}}",
     "confirmDistribute_one": "Zadeklaruj {{count}} atakującego",
-    "confirmDistribute_other": "Zadeklaruj {{count}} atakujących"
+    "confirmDistribute_other": "Zadeklaruj {{count}} atakujących",
+    "mustAttackPlayer": "{{creature}} musi zaatakować {{player}}"
   },
   "fullControl": {
     "label": "Kontrola",
@@ -462,6 +486,7 @@
     "commanderTitleTax": "Dowódca: {{name}} (Podatek: +{{tax}})",
     "castCommander": "Rzuć {{name}} — kliknij dwukrotnie lub przeciągnij, aby zagrać",
     "castCommanderTax": "Rzuć {{name}} (Podatek: +{{tax}}) — kliknij dwukrotnie lub przeciągnij, aby zagrać",
+    "ninjutsuCommander": "Ninjutsu dowódcy: {{name}} — kliknij, aby zwrócić niezablokowanego atakującego do ręki i umieścić tego dowódcę na polu bitwy przekręconego i atakującego",
     "tax": "Podatek: +{{tax}}",
     "companion": "Towarzysz",
     "companionTitle": "Towarzysz: {{name}}",
@@ -578,6 +603,16 @@
     "blockIncompleteAttacker": "{{assigned}} z {{required}} blokujących przydzielonych",
     "blockIncomplete_one": "{{count}} atakujący potrzebuje kolejnego blokującego",
     "blockIncomplete_other": "{{count}} atakujących potrzebuje kolejnego blokującego",
+    "mustAttackBadge": "Must attack",
+    "mustAttackSatisfiedBadge": "Attacking ✓",
+    "mustBlockBadge": "Must block",
+    "mustBlockSatisfiedBadge": "Blocking ✓",
+    "cantAttackBadge": "Can't attack",
+    "cantBlockBadge": "Can't block",
+    "unsatisfiedMustAttack_one": "{{count}} creature must attack",
+    "unsatisfiedMustAttack_other": "{{count}} creatures must attack",
+    "unsatisfiedMustBlock_one": "{{count}} creature must block",
+    "unsatisfiedMustBlock_other": "{{count}} creatures must block",
     "assignDamageTitle": "Przydziel {{amount}} obrażeń bojowych",
     "assignDamageSubtitle": "{{name}} — Pozostało: {{remaining}}",
     "assignDamageButton": "Przydziel obrażenia",
@@ -1597,6 +1632,10 @@
     "title": "Wybierz przeciwnika do starcia",
     "subtitle": "Wybierz, który przeciwnik stoczy z tobą starcie."
   },
+  "pileOpponent": {
+    "title": "Choose Opponent",
+    "subtitle": "Choose which opponent separates the cards into piles."
+  },
   "assist": {
     "choose": {
       "title": "Choose a Player to Assist",
@@ -1816,6 +1855,16 @@
     "dontShowAgain": "Don’t show again this session",
     "reportTitle": "Stuck decision: {{kind}}",
     "reportWhatHappened": "**What happened**\n_briefly describe what you were doing_\n\n**Diagnostic**\n```\n{{diagnostic}}\n```"
+  },
+  "mayTriggerAutoChoice": {
+    "listHeader": "Wybory automatyczne",
+    "menuButtonShortActive": "Automatyczne decyzje",
+    "clearAll": "Wyczyść wszystko",
+    "remove": "Usuń",
+    "accept": "Tak",
+    "decline": "Nie",
+    "sourceFallback": "Efekt",
+    "entryLabel": "{{source}} — {{decision}}"
   },
   "optionalEffect": {
     "sourceFallback": "Efekt",

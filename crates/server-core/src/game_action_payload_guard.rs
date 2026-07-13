@@ -103,6 +103,7 @@ fn guard_counter_type_payload(field: &str, counter_type: &CounterType) -> Result
         | CounterType::Fade
         | CounterType::Age
         | CounterType::Shield
+        | CounterType::Finality
         | CounterType::Keyword(_) => {}
     }
     Ok(())
@@ -280,6 +281,14 @@ pub fn guard_game_action_payload(action: &GameAction) -> Result<(), String> {
         GameAction::SelectModes { indices } => {
             bound_list("SelectModes.indices", indices.len())?;
         }
+        // CR 732.2a: a client-supplied loop-shortcut declaration. Phase 3 requires
+        // `template: None`; when present (Phase 4), bound its pin list (mirrors the
+        // `SelectModes.indices` list bound). `count` is a small enum — nothing unbounded.
+        GameAction::DeclareShortcut { template, .. } => {
+            if let Some(template) = template {
+                bound_list("DeclareShortcut.template.decisions", template.decisions.len())?;
+            }
+        }
         GameAction::ChooseOutsideGameCards { selections } => {
             bound_list("ChooseOutsideGameCards.selections", selections.len())?;
         }
@@ -372,6 +381,7 @@ pub fn guard_game_action_payload(action: &GameAction) -> Result<(), String> {
         | GameAction::ChooseExert { .. }
         | GameAction::ChooseEnlist { .. }
         | GameAction::ChooseClashOpponent { .. }
+        | GameAction::ChoosePileOpponent { .. }
         | GameAction::ChooseAssistPlayer { .. }
         | GameAction::CommitAssistPayment { .. }
         | GameAction::MulliganDecision { .. }
@@ -450,6 +460,12 @@ pub fn guard_game_action_payload(action: &GameAction) -> Result<(), String> {
         | GameAction::GrantDebugPermission { .. }
         | GameAction::RevokeDebugPermission { .. }
         | GameAction::SetPriorityYield { .. }
+        | GameAction::SetMayTriggerAutoChoice { .. }
+        | GameAction::SetTriggerOrderTemplate { .. }
+        // CR 732.2b/c: a typed enum + a single `u32` — nothing unbounded.
+        | GameAction::RespondToShortcut { .. }
+        // CR 732.2a: the decline is payloadless — nothing to bound.
+        | GameAction::DeclineShortcut
         | GameAction::Concede { .. } => {}
     }
     Ok(())

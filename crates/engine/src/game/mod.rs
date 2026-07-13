@@ -34,6 +34,7 @@ mod contraptions_tests;
 pub mod cost_payability;
 pub(crate) mod costs;
 pub mod coverage;
+pub mod crew_payment;
 pub mod dash;
 #[cfg(test)]
 #[path = "dash_tests.rs"]
@@ -124,11 +125,13 @@ pub mod planechase;
 mod planechase_tests;
 pub mod planeswalker;
 pub mod players;
+pub mod preview;
 pub mod printed_cards;
 pub mod priority;
 pub mod public_state;
 pub mod quantity;
 pub mod replacement;
+pub mod replay;
 pub mod restrictions;
 pub mod room;
 pub(crate) mod sacrifice;
@@ -198,6 +201,7 @@ pub use keywords::parse_keywords;
 pub use mana_payment::{can_pay, pay_from_pool, produce_mana, PaymentError};
 pub use printed_cards::rehydrate_game_from_card_db;
 pub use public_state::finalize_public_state;
+pub use replay::{reconstruct_initial_state, ReplayError, ReplayPlayer};
 pub use triggers::process_triggers;
 pub use visibility::{filter_events_for_viewer, filter_state_for_viewer};
 pub use zones::{

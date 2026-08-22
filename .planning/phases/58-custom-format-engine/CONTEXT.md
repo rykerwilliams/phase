@@ -34,6 +34,51 @@ instances. Per this repo's CLAUDE.md "build for the class, not the card"
 principle, we build the format *class*, then instantiate the four as data — we
 do **not** hardcode four new `GameFormat` variants.
 
+## Maintainer input — resolves the delivery-surface question (Open item 1)
+
+A maintainer (matthewevans), given an informal, non-technical description of
+this proposal, independently converged on: *"Something like 'FFA that's super
+flexible and you can save a configuration as a custom format?'"* — i.e., start
+from the existing flexible multiplayer format (Free-for-All), let a host tune
+its knobs freely in the lobby they already use, and add a "save this as a
+custom format" action, rather than picturing a from-scratch format-authoring
+tool.
+
+This does **not** replace the schema below — it resolves *which axis is the
+primary entry point* and confirms delivery surface (c) over (b)-first. The
+custom-format schema (§ below, PLAN.md §1) always had two axes; this input
+corrects an emphasis mistake in how they were sequenced:
+
+- **Axis A — structural/match config**: `starting_life`, `min_players`/
+  `max_players`, `deck_size`, `singleton`, `range_of_influence`, `team_based`.
+  These are **already `FormatConfig` fields today**
+  (`crates/engine/src/types/format.rs:174-202`) and **already partially
+  exposed** in the existing multiplayer lobby
+  (`client/src/components/lobby/HostSetup.tsx` — starting life, player count,
+  deck size are already host-adjustable there for a chosen built-in
+  `GameFormat`). This is exactly what "FFA that's super flexible" names. The
+  original PLAN.md draft treated this axis as an inherited afterthought
+  ("structural params reuse `FormatConfig`'s existing fields (life/deck/etc.)")
+  rather than a first-class part of `CustomFormatRules` — that was the gap.
+- **Axis B — legality/era-rules config**: `legal_sets`, `banned`, `restricted`,
+  `reprint_policy`, `LegacyRuleSet` (mana burn, damage-on-stack, pre-M10 Wish,
+  legend-rule scope). This is genuinely new data with no existing UI surface,
+  and it's what actually makes the four EC formats *rules-correct* — no amount
+  of tuning Axis A knobs produces a faithful Old School 93-94. This axis keeps
+  every finding already in RESEARCH.md/CONTEXT.md/PLAN.md; none of that work
+  is discarded.
+
+**Resolution of Open item 1**: ship (c) — one `CustomFormatDef`/
+`CustomFormatRules` schema — but enter it through Axis A first, via the
+*existing* lobby (`HostSetup.tsx` + "save as custom format"), not a new
+designer screen and not (b)-first typed-preset-only delivery. The four EC
+formats remain the validating case for Axis B and may still ship as audited
+typed presets (a banned list should be curated, not free-typed by a player),
+but they are no longer the thing that must land *before* anything else is
+useful — the Axis A save-flow is smaller, ships independently, and is useful
+to every casual multiplayer table, not just old-school players. See PLAN.md §1
+and §7 for the schema and sequencing changes this implies.
+
 ## Confirmed (verified against source this session)
 
 - **`GameFormat` is a closed `Copy` enum** with ~23 variants, threaded through
@@ -107,9 +152,10 @@ do **not** hardcode four new `GameFormat` variants.
 
 ## Open (needs a human decision — do NOT resolve unilaterally)
 
-1. **Delivery surface** — player-facing format designer UI (a), operator/preset
-   config (b), or both over one schema (c). PLAN.md §7 lays out all three and
-   makes a recommendation, but the final call is the user's.
+1. ~~**Delivery surface**~~ — **RESOLVED**, see "Maintainer input" section
+   above: (c), entered via Axis A (structural config) through the existing
+   lobby first, Axis B (legality/legacy-rules) as audited presets validating
+   the same schema. PLAN.md §1 and §7 updated accordingly.
 2. **Reprint-policy fidelity — corrected/sharpened this round.** The original
    framing ("no frame/art metadata per printing, full stop") was too
    pessimistic. There are **two disjoint printing systems in this codebase

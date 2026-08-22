@@ -114,13 +114,47 @@ GameFormat::Custom(CustomFormatId)      // one additive, typed variant
 
 CustomFormatRules {                     // the resolved ruleset payload
     id: CustomFormatId,
-    // structural params reuse FormatConfig's existing fields (life/deck/etc.)
+    structural: StructuralRules,        // Axis A — see below; first-class, not inherited
+    legality: LegalityRules,            // Axis B — legal_sets/banned/restricted/legacy
+}
+
+// Axis A — "FFA that's super flexible" (maintainer framing, see CONTEXT.md
+// "Maintainer input"). Every field here already exists on `FormatConfig`
+// (`types/format.rs:174-202`) and several are already host-adjustable today in
+// `client/src/components/lobby/HostSetup.tsx` for a chosen built-in
+// `GameFormat` — this struct is a NAMED, SAVEABLE snapshot of that same
+// knob set, not new game-rule surface. This is the axis the lobby "save as
+// custom format" action captures.
+StructuralRules {
+    starting_life: i32,
+    min_players: u8,
+    max_players: u8,
+    deck_size: u16,
+    singleton: bool,
+    range_of_influence: Option<Box<RangeOfInfluenceConfig>>,  // mirrors FormatConfig's field exactly
+    team_based: bool,
+}
+
+// Axis B — legality/era-rules. Genuinely new data; no existing UI surface.
+// This is what makes the four EC formats rules-correct; kept exactly as
+// originally designed, just now named as its own struct rather than sharing
+// `CustomFormatRules`'s top level with Axis A undifferentiated.
+LegalityRules {
     legal_sets: Vec<SetCode>,           // set codes; membership = pool legality
     reprint_policy: ReprintPolicy,
     banned: Vec<CardName>,              // fully illegal
     restricted: Vec<CardName>,          // legal, max 1 (CR 100.2b path)
     legacy: LegacyRuleSet,
 }
+
+// A format saved from the lobby ("FFA, but I bumped starting life to 30 and
+// capped it at 4 players") sets `structural` and leaves `legality` at
+// defaults (no set restriction, no legacy rules) — a fully valid
+// `CustomFormatRules` value. The four EC formats set `legality` to real data
+// and `structural` to sane multiplayer/duel defaults. Neither axis requires
+// the other to be present; this is the orthogonality Block Constructed
+// already proved for `LegacyRuleSet` (§ below), now proved a second time
+// between Axis A and Axis B.
 
 ReprintPolicy {                         // enum — enforceable today only at set-code granularity
     OriginalPrintingsOnly,              // 93-94 / Classic intent (see limitation)
@@ -210,7 +244,7 @@ registry** is needed at runtime — deck validation and the mana-burn hook both
 read it from the config they already hold. `GameFormat` stays `Copy` (the heavy
 `Vec`s live in `FormatConfig`, which is `Clone`, not the enum).
 
-**Bundled presets** are typed constructors, exactly analogous to
+**Bundled presets (Axis B)** are typed constructors, exactly analogous to
 `FormatConfig::premodern()`:
 
 ```text
@@ -220,6 +254,19 @@ CustomFormatDef::middle_school()    -> restricted empty, larger banned
 CustomFormatDef::classic_magic()    -> own combined lists
 custom_format_registry() -> Vec<CustomFormatDef>   // parallel to GameFormat::registry()
 ```
+
+**Lobby saves (Axis A)** produce the identical `CustomFormatDef` shape from a
+different origin — a name plus the live `FormatConfig` a host just finished
+tuning, with `legality` left at defaults:
+
+```text
+CustomFormatDef::from_lobby_config(name: String, config: &FormatConfig) -> CustomFormatDef
+```
+
+Both paths converge on the same `custom_rules: Option<CustomFormatRules>` field
+and the same `GameFormat::Custom(CustomFormatId)` variant — there is exactly
+one runtime representation of "a custom format," authored two different ways.
+See §7 for where each one is surfaced to a player.
 
 (`CustomFormatDef` = display metadata + `CustomFormatRules`; the registry hands
 the frontend labels/short-labels/descriptions just like `FormatMetadata`.)
@@ -332,56 +379,81 @@ legality logic on the client.
 - Mana burn: unspent N mana at step end deals N with flag on, 0 with flag off —
   tests the flag+hook, not a specific card.
 - Serde round-trip of `FormatConfig` with `Some(custom_rules)` and `None`.
+- `CustomFormatDef::from_lobby_config`: a `FormatConfig` with non-default
+  `starting_life`/`max_players`/`deck_size`/`range_of_influence`/`team_based`
+  round-trips into a `CustomFormatRules.structural` that matches field-for-
+  field, with `legality` at its defaults — the general Axis-A save mechanism,
+  not a specific saved format's values.
 
-## 7. Delivery surface — (a) UI vs (b) config vs (c) both — RECOMMENDATION (confirm with user)
+## 7. Delivery surface — RESOLVED via maintainer input, see CONTEXT.md "Maintainer input"
 
-- **(a) Player-facing designer UI.** A client screen to author a format
-  interactively, saved/shared. *Changes:* the schema above **plus** persistence
-  (where do saved formats live — server DB? user profile?), a sharing/import
-  mechanism, validation UX, and a way for both players in a P2P/multiplayer game
-  to agree on the exact ruleset (the host's `CustomFormatRules` must be
-  authoritative and transmitted, like `FormatConfig` already is). Large surface.
+Previously framed as a three-way (a) UI / (b) config / (c) both choice with a
+(b)-first recommendation. **Resolved to (c), entered through Axis A via the
+existing lobby, not a new designer screen and not (b)-first.** The three
+options below are kept for the record; the recommendation that follows
+supersedes the original one.
+
+- **(a) Player-facing designer UI.** A from-scratch client screen to author a
+  format interactively. *Rejected as the entry point* — unnecessarily large
+  (persistence, sharing/import, validation UX all designed before anything
+  ships) when the near-identical capability already has a home.
 - **(b) Operator/preset config.** Formats delivered as bundled, version-
-  controlled preset data (the four EC formats as `CustomFormatDef` constructors),
-  optionally extendable by a self-hosted instance via a config the server loads
-  at startup. *Changes:* just the schema + presets + one deck-validation arm +
-  the registry export. The `GATED_SETS` env-var pattern is the *rough* precedent
-  for "deployment reads config", but we deliberately do **not** copy it (it's
-  generation-time and narrow); presets are typed Rust constructors, audited like
-  `FormatConfig::premodern()`.
-- **(c) Both, one schema.** (b) first; (a) is later an editor + load-path over
-  the identical `CustomFormatDef`.
+  controlled preset data (the four EC formats as `CustomFormatDef`
+  constructors), optionally extendable by a self-hosted instance via a config
+  the server loads at startup. *Changes:* schema + presets + one
+  deck-validation arm + the registry export. Presets are typed Rust
+  constructors, audited like `FormatConfig::premodern()`. Still the right
+  shape for Axis B (a banned list should be curated, not free-typed by a
+  player) — no longer the *first* thing to ship, just Axis B's delivery shape.
+- **(c) Both, one schema, Axis-A-first.** Extend the existing lobby
+  (`HostSetup.tsx`) with a "save as custom format" action once a host has
+  tuned `starting_life`/player count/`deck_size`/`range_of_influence`/
+  `team_based`/`singleton` to taste — this calls
+  `CustomFormatDef::from_lobby_config(name, &config)` and registers the
+  result. Axis B ships via (b)'s typed presets, on the same schema, in
+  parallel or immediately after.
 
-**Recommendation (for the user to confirm): ship (b) now, design the schema so
-(c) is the natural end state.** Reasoning: the four EC formats are known, curated
-rulesets that *should* be audited, version-controlled, and test-covered as
-engine data — exactly what typed bundled presets give us, and exactly the
-existing `FormatConfig::premodern()` pattern. A full player-facing designer (a)
-is a large, mostly-frontend + persistence + multiplayer-agreement surface that
-should not gate delivering the four formats. Because the engine is data-driven
-from day one (`CustomFormatDef` is the single source of truth whether authored
-by a constructor or, later, a UI), (a) becomes purely additive: an editor that
-emits a `CustomFormatDef` and a load path that registers it. This is the
-judgment call CLAUDE.md says to surface — please confirm (b)-first before
-implementation.
+**Recommendation: ship (c), Axis-A-first.** Reasoning: (1) a "save" button on a
+screen that already exposes most of Axis A's fields is a *much* smaller slice
+than a new designer UI — no new persistence design, no new sharing mechanism
+beyond whatever the lobby already does for a format choice, no new
+multiplayer-agreement problem (the host's `FormatConfig` is already
+authoritative and transmitted today). (2) It's useful to every casual
+multiplayer table immediately, not gated behind the four EC formats being
+finished. (3) It still fully validates the schema — `CustomFormatDef` is the
+single source of truth whichever path authors it, so the four EC presets
+remain a straightforward Axis B addition on the identical type, not a
+redesign. (4) The harder, genuinely-new Axis B work (legal sets, banned lists,
+legacy rules) is unaffected in scope or design — this only changes what ships
+*first* and *how a player reaches Axis A*, not what Axis B needs to be
+correct.
 
 ## 8. Sequencing
 
-1. **General engine** — `CustomFormatId`, `CustomFormatRules`, `ReprintPolicy`,
+1. **General engine** — `CustomFormatId`, `CustomFormatRules` (with
+   `StructuralRules` + `LegalityRules` sub-structs, §1), `ReprintPolicy`,
    `LegacyRuleSet`, `GameFormat::Custom` variant + all match arms,
    `FormatConfig.custom_rules`, `evaluate_custom_format` reusing existing
    enforcers, registry export. (Compiler-guided, mirrors phase 53.)
-2. **Four EC formats as data** — the four `CustomFormatDef` constructors +
-   registry entries + preset-integrity tests. Validates the engine from step 1.
-3. **Mana burn** — `LegacyRuleSet.mana_burn` at the drop-site hook. Small.
+2. **Axis A lobby save** — `CustomFormatDef::from_lobby_config`, a "save as
+   custom format" action on `HostSetup.tsx`, and a load path so a saved
+   `CustomFormatDef` appears as a selectable format on return visits. Small
+   frontend-plus-plumbing slice; ships before the EC formats and is useful on
+   its own to any casual table. Validates the schema's Axis A end from a real
+   UI, ahead of Axis B.
+3. **Four EC formats as data (Axis B)** — the four `CustomFormatDef`
+   constructors + registry entries + preset-integrity tests. Validates the
+   engine's Axis B from step 1; can proceed in parallel with step 2 since they
+   touch disjoint fields of the same schema.
+4. **Mana burn** — `LegacyRuleSet.mana_burn` at the drop-site hook. Small.
    Enables full fidelity for 93-94 / 95 and partial for Middle School / Classic.
-4. **Pre-M10 Wish exile access** (`pre_m10_wish_reaches_exile`) — SMALL
+5. **Pre-M10 Wish exile access** (`pre_m10_wish_reaches_exile`) — SMALL
    (RESEARCH §9); one-line pool-widening at `search_outside_game.rs:72`, gated by
    the flag, reusing the existing tested face-up-exile collector/mover. Can land
-   with or just after mana burn (step 3).
-5. **Damage uses the stack** — LARGE; its own sub-project; likely post-MVP.
+   with or just after mana burn (step 4).
+6. **Damage uses the stack** — LARGE; its own sub-project; likely post-MVP.
    Middle School / Classic are playable-with-caveat until it lands.
-6. **Eternal Chaos (stretch)** — depends on 93-94 existing (step 2) **plus** a
+7. **Eternal Chaos (stretch)** — depends on 93-94 existing (step 3) **plus** a
    genuinely new in-match pack-opening mechanic (Booster Tutor / Opening
    Ceremony / Summon the Pack + tutor-from-opened-packs errata + pack-based
    sideboard). Not designed here; flagged as a follow-on that is mostly a new

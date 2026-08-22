@@ -24,12 +24,15 @@ const mockHostAdapter = {
   initialize: vi.fn(async () => {}),
   startDraft: vi.fn(async () => {}),
   submitPick: vi.fn(async () => mockView("Drafting")),
+  submitPickWithDraftEffect: vi.fn(async () => mockView("Drafting")),
   submitDeck: vi.fn(async () => mockView("Deckbuilding")),
   getHostView: vi.fn(async () => mockView("Lobby")),
   kickPlayer: vi.fn(),
   requestPause: vi.fn(),
   requestResume: vi.fn(),
   overrideMatchResult: vi.fn(async () => {}),
+  submitMatchSettlement: vi.fn(async () => {}),
+  submitAuthorized: vi.fn(),
   dispose: vi.fn(async () => {}),
   status: "idle" as const,
   roomCode: null,
@@ -45,7 +48,10 @@ const mockGuestAdapter = {
   }),
   initialize: vi.fn(async () => {}),
   submitPick: vi.fn(async () => {}),
+  submitPickWithDraftEffect: vi.fn(async () => {}),
   submitDeck: vi.fn(async () => {}),
+  submitAuthorized: vi.fn(),
+  acknowledgeAuthorized: vi.fn(),
   dispose: vi.fn(async () => {}),
   status: "idle" as const,
   seatIndex: null,
@@ -76,6 +82,16 @@ function mockView(status: string): DraftPlayerView {
     pass_direction: "Left",
     current_pack: null,
     pool: [],
+    draft_effects: [],
+    pool_groups: {
+      color_groups: [],
+      type_groups: [],
+      cmc_groups: [],
+      rarity_groups: [],
+      type_filter_options: [],
+      color_filter_options: [],
+      color_counts: { white: 0, blue: 0, black: 0, red: 0, green: 0 },
+    },
     seats: [],
     cards_per_pack: 14,
     pack_count: 3,
@@ -84,9 +100,11 @@ function mockView(status: string): DraftPlayerView {
     timer_remaining_ms: null,
     standings: [],
     current_round: 0,
+    next_pairing_round: 1,
     tournament_format: "Swiss",
     pod_policy: "Competitive",
     pairings: [],
+    match_config: { match_type: "Bo1" },
   };
 }
 
@@ -205,6 +223,53 @@ describe("multiplayerDraftStore", () => {
       expect(state.view).toBe(view);
     });
 
+    it("pairingsGenerated advances currentRound, leaves nextPairingRound to viewUpdated, and supersedes the error", async () => {
+      await useMultiplayerDraftStore.getState().hostDraft({
+        poolInput: { type: "Set", data: { set_pool_json: "{}" } },
+        kind: "Premier",
+        podSize: 8,
+        hostDisplayName: "Host",
+        tournamentFormat: "Swiss",
+        podPolicy: "Competitive",
+      });
+
+      // The host's real round boundary: the engine view for round 2 arrives
+      // first, then pairing generation commits round 3.
+      const view = {
+        ...mockView("MatchInProgress"),
+        current_round: 2,
+        next_pairing_round: 3,
+      };
+      capturedHostEventHandler!({ type: "viewUpdated", view });
+      // Reach-guard: prove the error is live before the boundary, so a null
+      // afterwards cannot mean "it was never set".
+      capturedHostEventHandler!({
+        type: "error",
+        message: "Failed to advance round",
+      });
+      expect(useMultiplayerDraftStore.getState().error).toBe(
+        "Failed to advance round",
+      );
+      capturedHostEventHandler!({ type: "pairingsGenerated", round: 3, pairings: [] });
+
+      const state = useMultiplayerDraftStore.getState();
+      // Reach-guards: both events were demonstrably delivered, so a wrong
+      // `nextPairingRound` cannot be confused with "no event reached the store".
+      expect(state.view).toBe(view);
+      expect(state.phase).toBe("matchInProgress");
+      expect(state.currentRound).toBe(3);
+      // `pairingsGenerated` writes only the round it owns. The `3 / 3` relation
+      // is the deliberate window, not an accident: anyone later adding an
+      // inlined `nextPairingRound: event.round + 1` to that handler — the
+      // TypeScript re-derivation this work exists to abolish — yields 4 here.
+      expect(state.nextPairingRound).toBe(3);
+      // REVERT-FAILING: drop `error: null` from the `pairingsGenerated` handler
+      // and this goes red. A successful round boundary supersedes the banner the
+      // failed attempt raised — without it the retry that WORKED still shows
+      // "Failed to advance round".
+      expect(state.error).toBeNull();
+    });
+
     it("handles host-seat Bo3 prompt messages", async () => {
       await useMultiplayerDraftStore.getState().hostDraft({
         poolInput: { type: "Set", data: { set_pool_json: "{}" } },
@@ -269,12 +334,19 @@ describe("multiplayerDraftStore", () => {
             ai_decks: [],
           },
           matchConfig: { match_type: "Bo1" },
+          binding: {
+            podId: "draft-1", matchId: "match-1", round: 1,
+            sessionKey: "session-1", lease: "lease-1", nonce: "nonce-1",
+            revision: 0, matchAuthoritySeat: 0,
+          },
         },
       });
 
       await useMultiplayerDraftStore.getState().reportActiveMatchGameResult(1);
 
-      expect(mockHostAdapter.overrideMatchResult).toHaveBeenCalledWith("match-1", 4);
+      expect(mockHostAdapter.submitMatchSettlement).toHaveBeenCalledWith(expect.objectContaining({
+        winnerSeat: 4,
+      }));
     });
 
     it("reports active match concessions as opponent wins", async () => {
@@ -301,12 +373,19 @@ describe("multiplayerDraftStore", () => {
             ai_decks: [],
           },
           matchConfig: { match_type: "Bo1" },
+          binding: {
+            podId: "draft-1", matchId: "match-2", round: 1,
+            sessionKey: "session-2", lease: "lease-2", nonce: "nonce-2",
+            revision: 0, matchAuthoritySeat: 0,
+          },
         },
       });
 
       await useMultiplayerDraftStore.getState().reportActiveMatchConcession();
 
-      expect(mockHostAdapter.overrideMatchResult).toHaveBeenCalledWith("match-2", 5);
+      expect(mockHostAdapter.submitMatchSettlement).toHaveBeenCalledWith(expect.objectContaining({
+        winnerSeat: 5,
+      }));
     });
   });
 
@@ -400,6 +479,27 @@ describe("multiplayerDraftStore", () => {
   });
 
   describe("shared actions", () => {
+    it("submits a draft-effect pick through the host adapter", async () => {
+      await useMultiplayerDraftStore.getState().hostDraft({
+        poolInput: { type: "Set", data: { set_pool_json: "{}" } },
+        kind: "Premier",
+        podSize: 8,
+        hostDisplayName: "Host",
+        tournamentFormat: "Swiss",
+        podPolicy: "Competitive",
+      });
+
+      await useMultiplayerDraftStore.getState().submitPickWithDraftEffect(
+        "cogwork-1",
+        ["card-1", "card-2"],
+      );
+
+      expect(mockHostAdapter.submitPickWithDraftEffect).toHaveBeenCalledWith(
+        "cogwork-1",
+        ["card-1", "card-2"],
+      );
+    });
+
     it("selectCard and confirmPick work together", async () => {
       await useMultiplayerDraftStore.getState().hostDraft({
         poolInput: { type: "Set", data: { set_pool_json: "{}" } },

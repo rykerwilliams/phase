@@ -1,23 +1,42 @@
 import {
-  LOBBY_MIN_SUPPORTED_SERVER_PROTOCOL,
-  MIN_SUPPORTED_SERVER_PROTOCOL,
+  LOBBY_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
+  serverProtocolRejection,
   type ServerInfo,
 } from "../adapter/ws-adapter";
 
 /**
  * Result of a successful handshake with `phase-server`. Wraps the live
- * `WebSocket` plus the `ServerInfo` parsed from `ServerHello`. Callers
+ * socket plus the `ServerInfo` parsed from `ServerHello`. Callers
  * own the socket — whoever received a `PhaseSocket` from `openPhaseSocket`
  * is responsible for calling `close()` when done.
  */
-export interface PhaseSocket {
-  readonly ws: WebSocket;
+export interface PhaseSocketTransport {
+  readonly readyState: number;
+  onopen: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent<string>) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onclose: ((event: CloseEvent) => void) | null;
+  addEventListener(
+    type: "close",
+    listener: (event: CloseEvent) => void,
+    options?: AddEventListenerOptions | boolean,
+  ): void;
+  removeEventListener(type: "close", listener: (event: CloseEvent) => void): void;
+  send(data: string): void;
+  close(): void;
+}
+
+export type PhaseSocketFactory<T extends PhaseSocketTransport = PhaseSocketTransport> =
+  (url: string) => T;
+
+export interface PhaseSocket<T extends PhaseSocketTransport = WebSocket> {
+  readonly ws: T;
   readonly serverInfo: ServerInfo;
   close(): void;
 }
 
-export interface OpenOptions {
+export interface OpenOptions<T extends PhaseSocketTransport = WebSocket> {
   /**
    * Abort the pending handshake. If the signal fires before resolution the
    * returned promise rejects with an `AbortError` AND the in-flight
@@ -26,6 +45,11 @@ export interface OpenOptions {
   signal?: AbortSignal;
   /** WS-open + ServerHello wait cap, in ms. Defaults to 5000. */
   timeoutMs?: number;
+  /**
+   * Creates the transport used for the handshake. Omitted callers retain the
+   * browser's direct `new WebSocket(url)` behavior.
+   */
+  socketFactory?: PhaseSocketFactory<T>;
 }
 
 export class HandshakeError extends Error {
@@ -68,19 +92,27 @@ export class HandshakeError extends Error {
  */
 export function openPhaseSocket(
   wsUrl: string,
-  opts: OpenOptions = {},
-): Promise<PhaseSocket> {
+  opts?: OpenOptions<WebSocket>,
+): Promise<PhaseSocket<WebSocket>>;
+export function openPhaseSocket<T extends PhaseSocketTransport>(
+  wsUrl: string,
+  opts: OpenOptions<T>,
+): Promise<PhaseSocket<T>>;
+export function openPhaseSocket(
+  wsUrl: string,
+  opts: OpenOptions<PhaseSocketTransport> = {},
+): Promise<PhaseSocket<PhaseSocketTransport>> {
   const { signal, timeoutMs = 5000 } = opts;
 
-  return new Promise<PhaseSocket>((resolve, reject) => {
+  return new Promise<PhaseSocket<PhaseSocketTransport>>((resolve, reject) => {
     if (signal?.aborted) {
       reject(new HandshakeError("aborted", "Handshake aborted before start"));
       return;
     }
 
-    let ws: WebSocket;
+    let ws: PhaseSocketTransport;
     try {
-      ws = new WebSocket(wsUrl);
+      ws = opts.socketFactory?.(wsUrl) ?? new WebSocket(wsUrl);
     } catch (err) {
       reject(
         new HandshakeError(
@@ -179,6 +211,7 @@ export function openPhaseSocket(
         build_commit: string;
         protocol_version: number;
         mode: "Full" | "LobbyOnly";
+        lobby_protocol_version?: number;
         public_url?: string;
       };
       const info: ServerInfo = {
@@ -186,29 +219,15 @@ export function openPhaseSocket(
         buildCommit: data.build_commit,
         protocolVersion: data.protocol_version,
         mode: data.mode,
+        lobbyProtocolVersion: data.lobby_protocol_version,
         publicUrl: data.public_url,
       };
 
-      const minAcceptedProtocol =
-        info.mode === "LobbyOnly"
-          ? LOBBY_MIN_SUPPORTED_SERVER_PROTOCOL
-          : MIN_SUPPORTED_SERVER_PROTOCOL;
-
-      // Accept any server in [minAcceptedProtocol, PROTOCOL_VERSION]. Full
-      // servers are current-only for breaking game protocol releases; LobbyOnly
-      // brokers keep a one-version rollout window because they do not carry
-      // game-state/action payloads.
-      if (
-        info.protocolVersion < minAcceptedProtocol ||
-        info.protocolVersion > PROTOCOL_VERSION
-      ) {
-        const reason =
-          info.protocolVersion < minAcceptedProtocol
-            ? `Server protocol version ${info.protocolVersion} is older than supported (client speaks ${PROTOCOL_VERSION}, min ${minAcceptedProtocol}). Please wait for the lobby to finish rolling out.`
-            : `Server protocol version ${info.protocolVersion} is newer than this client (${PROTOCOL_VERSION}). Please refresh to update.`;
+      const rejection = serverProtocolRejection(info);
+      if (rejection) {
         settle(() => {
           ws.close();
-          reject(new HandshakeError("protocol_mismatch", reason, info));
+          reject(new HandshakeError("protocol_mismatch", rejection, info));
         });
         return;
       }
@@ -216,9 +235,14 @@ export function openPhaseSocket(
       const clientProtocolVersion =
         info.mode === "LobbyOnly" ? info.protocolVersion : PROTOCOL_VERSION;
 
-      // Send our ClientHello back. For LobbyOnly brokers in the rollout
-      // window, echo the accepted broker protocol so an older deployed worker
-      // does not reject a newer local-dev client as a future protocol.
+      // Send our ClientHello back.
+      //
+      // `protocol_version` echoes the broker's own number for LobbyOnly so a
+      // deployed worker on the LEGACY gate does not reject a newer client as a
+      // future protocol. `lobby_protocol_version` is always our own: a broker
+      // that understands it gates on that instead, which is what decouples the
+      // lobby handshake from full-game churn. Brokers that predate the field
+      // ignore it (nothing sets `deny_unknown_fields`).
       ws.send(
         JSON.stringify({
           type: "ClientHello",
@@ -226,6 +250,7 @@ export function openPhaseSocket(
             client_version: __APP_VERSION__,
             build_commit: __BUILD_HASH__,
             protocol_version: clientProtocolVersion,
+            lobby_protocol_version: LOBBY_PROTOCOL_VERSION,
           },
         }),
       );

@@ -32,7 +32,9 @@ jobs:
   rust-lint:
     name: Rust lint (fmt, clippy, parser gate)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Clippy can consume the former 15-minute ceiling on a cold hosted cache;
+    # retain a bounded job while leaving room for the remaining lint gates.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,11 +46,28 @@ jobs:
           target: wasm32-unknown-unknown
           cache-shared-key: rust-debug
 
+      - uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Enable sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
+      # `--locked` costs nothing here (this step already resolves the whole
+      # workspace) and asserts the committed root Cargo.lock is in sync with the
+      # manifests. Without it, dropping a crate leaves dead entries in the lock,
+      # every later cargo invocation silently rewrites the file, and Nightly
+      # Release dies on `cargo release`'s dirty-tree check -- which is exactly
+      # what #7556 did. `--locked` is already used for the Tauri manifest below.
       - name: Clippy
-        run: cargo clippy --workspace --exclude phase-tauri --all-targets --features engine/proptest -- -D warnings
+        run: cargo clippy --locked --workspace --exclude phase-tauri --all-targets --features engine/proptest -- -D warnings
+
+      - name: Interaction bindings are current
+        run: ./scripts/check-interaction-bindings.sh --check
 
       - name: Parser combinator gate
         # Diff-based gate: new parser code must use nom combinators, not
@@ -59,6 +78,14 @@ jobs:
             BASE="origin/main"
           fi
           ./scripts/check-parser-combinators.sh "$BASE"
+
+      - name: PreLowered ratchet (Plan 05b burn-down)
+        # Ceiling check on `OracleNodeIr::PreLowered*` occurrences per parser
+        # file. Counts may only decrease, and a parser file carrying PreLowered
+        # with no ledger entry fails, so a new producer cannot be added in a
+        # third file and escape the burn-down. Ledger:
+        # scripts/prelowered-ratchet.txt
+        run: ./scripts/check-prelowered-ratchet.sh
 
       - name: Skill doc gate (oracle-parser SKILL.md)
         # Asserts .claude/skills/oracle-parser/SKILL.md still matches the
@@ -71,14 +98,19 @@ jobs:
         #     (keyword queries via game/keywords.rs) instead of raw state pokes.
         # (B) Full-tree: gameplay zone changes must go through zone_pipeline,
         #     not the raw movers / zone containers / `GameObject::zone =`.
-        #     Ratchets against scripts/zone-authority-baseline.txt, which may
-        #     only shrink as the Plan 03 tranches migrate each site.
+        #     Every classified site requires a nonempty `allow-raw-zone:`
+        #     annotation explaining why it is not a replaceable zone event.
         run: |
           BASE="${{ github.event.pull_request.base.sha || github.event.before }}"
           if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             BASE="origin/main"
           fi
           ./scripts/check-engine-authorities.sh "$BASE"
+
+      - name: Resolution-frame boundary guard
+        # Full-tree guard: legacy resolution keys are reader/fixture-only, and
+        # ResolutionStack mutation remains top-only or adjacent-pair scoped.
+        run: ./scripts/check-resolution-frame-boundaries.sh
 
       - name: Test card-data load gate
         # Diff-based gate: new test code must not reparse the full ~90 MB
@@ -92,13 +124,13 @@ jobs:
           ./scripts/check-test-card-data-load.sh "$BASE"
 
   rust-test:
-    name: Rust tests (shard ${{ matrix.shard }}/2)
+    name: Rust tests (shard ${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v4
 
@@ -130,6 +162,14 @@ jobs:
           target: wasm32-unknown-unknown
           cache-shared-key: rust-debug
 
+      - uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Enable sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
+
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
@@ -140,7 +180,7 @@ jobs:
         # caught before it lands on the branch that feeds staging/preview.
         env:
           PROPTEST_CASES: ${{ github.event_name == 'pull_request' && '32' || '256' }}
-        run: cargo nextest run --profile ci --partition count:${{ matrix.shard }}/2 --workspace --exclude phase-tauri --exclude mtgish-import --features engine/proptest --status-level fail --final-status-level fail
+        run: cargo nextest run --profile ci --partition count:${{ matrix.shard }}/4 --workspace --exclude phase-tauri --features engine/proptest --status-level fail --final-status-level fail
 
   card-data-gate:
     name: Card data (generate, validate, coverage)
@@ -156,6 +196,14 @@ jobs:
         with:
           target: wasm32-unknown-unknown
           cache-shared-key: rust-debug
+
+      - uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Enable sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "CARGO_INCREMENTAL=0" >> "$GITHUB_ENV"
 
       - name: Set cache keys
         id: cache-keys
@@ -256,6 +304,13 @@ jobs:
         run: |
           cargo run --profile tool --features cli --bin oracle-gen -- data/ --stats --names-out data/card-names.json > data/card-data.json
 
+      - name: Verify Gemstone Caverns production-export drift guard
+        run: |
+          test -s data/card-data.json
+          test_name='gemstone_caverns_begin_game::gemstone_caverns_full_export_retains_luck_counter_mana_contract'
+          cargo test -p phase-engine --test integration "$test_name" -- --exact 2>&1 | tee /tmp/gemstone-export-guard.log
+          grep -F 'test result: ok. 1 passed' /tmp/gemstone-export-guard.log
+
       - name: Card export must not mutate the tracked parser vocabulary
         # Regression guard: the export is a PURE READ of the tracked tree.
         #
@@ -309,6 +364,25 @@ jobs:
         # would hit the cache, skip the check, and report a false green. The
         # export is present either way (generated above or restored by cardgen).
         run: python3 scripts/draw_replacement_census.py --corpus --check
+
+      - name: Cost-walk carrier drift guard (CR 605.1a)
+        # `visit_ability_def_costs_scoped` does not descend the eight inline
+        # branch carriers that `visit_effect_scoped` does (documented KNOWN GAP).
+        # A cost on a carrier-nested `AbilityDefinition` therefore escapes
+        # CR 605.1a's cost criterion, and a `Mill` / `Exile { Library }` cost
+        # there would keep mana-ability status it should have lost. Zero such
+        # costs exist today; this fails the moment a parser production emits one.
+        #
+        # Lives here, not in the Rust test job, for the same reason as the draw
+        # census above: it reads the generated (gitignored) export. The
+        # equivalent `#[test]` would self-skip in `Rust tests` (see the header of
+        # scripts/check-test-card-data-load.sh), and the change that triggers
+        # this gap comes from a parser author whose PR is checked by CI — so a
+        # CI-invisible guard is green for exactly the person it exists to stop.
+        #
+        # Unconditional, like the draw census: gates-cache does not hash
+        # scripts/**, so a cache hit must not skip it.
+        run: python3 scripts/cost_walk_carrier_census.py --check
 
       - name: Card support coverage report
         # Skipped on a gates-cache hit — coverage-data.json and
@@ -571,7 +645,10 @@ jobs:
         run: cargo check --package engine-wasm --target wasm32-unknown-unknown
 
   tauri-check:
-    name: Tauri compile check
+    # Disabled pending a faster Linux dependency setup: apt-get update regularly
+    # consumes this job's entire 15-minute timeout.
+    if: ${{ false }}
+    name: Tauri compile check + tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -591,34 +668,29 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev
 
-      - name: Stub frontend dist for tauri::generate_context!
+      - name: Stub bootstrap dist for tauri::generate_context!
         # phase-tauri's build.rs runs `tauri::generate_context!()` which
-        # requires `frontendDist` (../dist per tauri.conf.json) to exist.
-        # An empty stub is enough for type-checking — we don't bundle assets.
+        # requires `frontendDist` (../bootstrap/dist per tauri.conf.json) to
+        # exist. An empty stub is enough for type-checking — we don't bundle
+        # bootstrap assets here.
         run: |
-          mkdir -p client/dist
-          echo '<!doctype html><html></html>' > client/dist/index.html
-
-      - name: Stub phase-server sidecar + bundled resources for tauri-build
-        # tauri.conf.json declares `externalBin: ["binaries/phase-server"]`
-        # and bundled data resources, so tauri-build requires those paths to
-        # exist at check time. The real sidecar / data files are built in the
-        # release matrix; for PR-time compile checks we only need the paths to
-        # exist.
-        run: |
-          mkdir -p client/src-tauri/binaries client/public
-          touch client/src-tauri/binaries/phase-server-x86_64-unknown-linux-gnu
-          touch client/public/card-data.json
-          touch client/public/draft-pools.json
+          mkdir -p client/bootstrap/dist
+          echo '<!doctype html><html></html>' > client/bootstrap/dist/index.html
 
       - name: Tauri compile check
         # phase-tauri is excluded from the workspace clippy and nextest runs
-        # above (no proptest support, no tests). Without this step, compile
-        # errors in the desktop crate only surface at release time during the
-        # 30-45min build-tauri matrix. Catches them on every PR in ~3 min.
+        # above. Without this step, compile errors in the desktop crate only
+        # surface at shell release time. Catches them on every PR in ~3 min.
         # Driven via --manifest-path because client/src-tauri is excluded
         # from the root workspace, so `-p phase-tauri` cannot resolve it.
         run: cargo check --locked --manifest-path client/src-tauri/Cargo.toml
+
+      - name: Tauri tests
+        # phase-tauri's `#[cfg(test)]` unit tests (migration, native_bridge,
+        # native_engine, audio_probe, ...) are excluded from the workspace
+        # nextest run above for the same reason as the compile check, so they
+        # need their own step or they'd never run in CI at all.
+        run: cargo test --locked --manifest-path client/src-tauri/Cargo.toml
 
   rust-check:
     name: Rust (fmt, clippy, test, coverage-gate)

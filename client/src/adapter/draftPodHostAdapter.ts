@@ -11,13 +11,14 @@
  */
 
 import { DraftAdapter } from "./draft-adapter";
-import type { DraftPlayerView, PairingView, PodPolicy, PoolInput, SeatPublicView, TournamentFormat } from "./draft-adapter";
+import type { DraftKind, DraftPlayerView, PairingView, PodPolicy, PoolInput, SeatPublicView, TournamentFormat } from "./draft-adapter";
 import type { MatchScore } from "./types";
 import { P2PDraftHost, type DraftHostEvent } from "./p2p-draft-host";
 import { hostRoom, type HostResult } from "../network/connection";
-import type { DraftMatchLaunch, DraftPauseReason } from "../network/draftProtocol";
+import type { DraftMatchLaunch, DraftMatchSettlement, DraftPauseReason } from "../network/draftProtocol";
 import type { BrokerClient, RegisterHostRequest } from "../services/brokerClient";
 import { loadDraftHostSession } from "../services/draftPersistence";
+import type { DraftIntergameCommand, DraftIntergameCommandAck } from "../services/intergameCommandLedger";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export type DraftPodHostEvent =
   | { type: "pairingsGenerated"; round: number; pairings: PairingView[] }
   | { type: "matchStart"; launch: DraftMatchLaunch }
   | { type: "matchResultReceived"; matchId: string; winnerSeat: number | null }
-  | { type: "roundAdvanced"; newRound: number }
+  | { type: "roundAdvanced" }
   | { type: "timerExpired" }
   | {
       type: "bo3SideboardPrompt";
@@ -75,6 +76,7 @@ export type DraftPodHostEvent =
   | { type: "bo3SideboardPromptSent"; matchId: string }
   | { type: "bo3BothSideboardsSubmitted"; matchId: string }
   | { type: "bo3GameStarted"; matchId: string; gameNumber: number }
+  | { type: "bo3AuthorizedCommand"; command: DraftIntergameCommand; acknowledgement: DraftIntergameCommandAck }
   | { type: "error"; message: string };
 
 type DraftPodHostEventListener = (event: DraftPodHostEvent) => void;
@@ -103,7 +105,7 @@ function hostStatusForView(view: DraftPlayerView): DraftPodHostStatus {
 
 export interface DraftPodHostConfig {
   poolInput: PoolInput;
-  kind: "Premier" | "Traditional";
+  kind: Exclude<DraftKind, "Quick">;
   podSize: number;
   hostDisplayName: string;
   /** Swiss (3 rounds) or Single Elimination bracket. */
@@ -290,7 +292,7 @@ export class DraftPodHostAdapter {
         this.emit({ type: "lobbyFull" });
         break;
       case "draftStarted":
-        this.setStatus("drafting");
+        this.setStatus(hostStatusForView(event.view));
         this.emit({ type: "draftStarted", view: event.view });
         break;
       case "pickReceived":
@@ -339,7 +341,7 @@ export class DraftPodHostAdapter {
         break;
       case "roundAdvanced":
         this.setStatus("pairing");
-        this.emit({ type: "roundAdvanced", newRound: event.newRound });
+        this.emit({ type: "roundAdvanced" });
         break;
       case "timerExpired":
         this.emit({ type: "timerExpired" });
@@ -380,6 +382,9 @@ export class DraftPodHostAdapter {
           firstPlayerSeat: event.firstPlayerSeat,
         });
         break;
+      case "bo3AuthorizedCommand":
+        this.emit({ type: "bo3AuthorizedCommand", command: event.command, acknowledgement: event.acknowledgement });
+        break;
     }
   }
 
@@ -395,6 +400,14 @@ export class DraftPodHostAdapter {
     return this.host.submitHostPick(cardInstanceId);
   }
 
+  async submitPickWithDraftEffect(
+    effectCardInstanceId: string,
+    cardInstanceIds: string[],
+  ): Promise<DraftPlayerView> {
+    if (!this.host) throw new Error("Host not initialized");
+    return this.host.submitHostPickWithDraftEffect(effectCardInstanceId, cardInstanceIds);
+  }
+
   async submitDeck(mainDeck: string[]): Promise<DraftPlayerView> {
     if (!this.host) throw new Error("Host not initialized");
     return this.host.submitHostDeck(mainDeck);
@@ -407,9 +420,9 @@ export class DraftPodHostAdapter {
 
   // ── Match coordination ──────────────────────────────────────────────
 
-  async generatePairings(round: number): Promise<void> {
+  async generatePairings(): Promise<void> {
     if (!this.host) throw new Error("Host not initialized");
-    await this.host.generatePairings(round);
+    await this.host.generatePairings();
   }
 
   async advanceRound(): Promise<void> {
@@ -420,6 +433,11 @@ export class DraftPodHostAdapter {
   async overrideMatchResult(matchId: string, winnerSeat: number | null): Promise<void> {
     if (!this.host) throw new Error("Host not initialized");
     await this.host.overrideMatchResult(matchId, winnerSeat);
+  }
+
+  async submitMatchSettlement(settlement: DraftMatchSettlement): Promise<void> {
+    if (!this.host) throw new Error("Host not initialized");
+    await this.host.submitHostMatchSettlement(settlement);
   }
 
   async replaceSeatWithBot(seat: number): Promise<void> {
@@ -441,19 +459,9 @@ export class DraftPodHostAdapter {
     this.host.handleMatchBetweenGames(matchId, gameNumber, score, loserSeat, seatA, seatB);
   }
 
-  handleSideboardSubmit(
-    seat: number,
-    matchId: string,
-    mainDeck: string[],
-    sideboard: Array<{ name: string; count: number }>,
-  ): void {
+  submitAuthorized(seat: number, command: DraftIntergameCommand): void {
     if (!this.host) throw new Error("Host not initialized");
-    this.host.handleSideboardSubmit(seat, matchId, mainDeck, sideboard);
-  }
-
-  handlePlayDrawChosen(seat: number, matchId: string, playFirst: boolean): void {
-    if (!this.host) throw new Error("Host not initialized");
-    this.host.handlePlayDrawChosen(seat, matchId, playFirst);
+    this.host.submitAuthorized(seat, command);
   }
 
   // ── Host controls ──────────────────────────────────────────────────

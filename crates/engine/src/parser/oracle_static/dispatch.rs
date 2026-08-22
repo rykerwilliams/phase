@@ -6,7 +6,7 @@ use super::prelude::*;
 use super::support::*;
 use super::{
     anthem::*, cda::*, cost_mod::*, evasion::*, keyword_grant::*, loyalty::*, mana_transform::*,
-    restriction::*, type_change::*,
+    restriction::*, same_is_true::*, type_change::*,
 };
 use crate::types::statics::ProhibitionScope;
 
@@ -25,6 +25,46 @@ fn parse_self_reference_subject(input: &str) -> OracleResult<'_, ()> {
         }
     }
     Err(oracle_err(input))
+}
+
+/// CR 707.2c + CR 613.1a + CR 303.4: "Enchanted <subject> is a copy of the
+/// chosen <type>." — Metamorphic Alteration's companion static. Emits the
+/// parse-time `ContinuousModification::CopyChosen` MARKER affecting the
+/// enchanted host. The marker is a Layer-1 no-op at apply time: the real copy
+/// is installed as a `CopyValues` transient continuous effect when the
+/// `Effect::ChoosePermanent` as-enters choice is answered (per CR 707.2c the
+/// copiable values are fixed only when the effect first starts to apply).
+/// Emitting the static keeps the printed line "supported" and documents the
+/// copy layer on the card. The donor type after "the chosen" is informational
+/// (the concrete copy source is picked at entry), so it is required to parse
+/// but is not otherwise threaded.
+fn parse_enchanted_is_copy_of_chosen(tp: &TextPair, text: &str) -> Option<StaticDefinition> {
+    let rest = nom_tag_tp(tp, "enchanted ")?;
+    // Subject type of the enchanted host (creature / permanent). Trim the
+    // trailing period first so the donor phrase parses to an empty remainder.
+    let subject_lower = rest.lower.trim_end_matches('.').trim();
+    let (subject_filter, after_subject) = parse_type_phrase(subject_lower);
+    let TargetFilter::Typed(mut subject) = subject_filter else {
+        return None;
+    };
+    let (donor_lower, _) = tag::<_, _, OracleError<'_>>(" is a copy of the chosen ")
+        .parse(after_subject)
+        .ok()?;
+    // The donor type ("creature" / "permanent") must parse and fully consume the
+    // remainder — a trailing rider (e.g. "except it has flying") is not modeled
+    // by the marker, so bail rather than silently drop it.
+    let (_donor_filter, donor_rest) = parse_type_phrase(donor_lower);
+    if !donor_rest.trim().is_empty() {
+        return None;
+    }
+    // CR 303.4 + CR 613.1: the static affects the enchanted host.
+    subject.properties.push(FilterProp::EnchantedBy);
+    Some(
+        StaticDefinition::continuous()
+            .affected(TargetFilter::Typed(subject))
+            .modifications(vec![ContinuousModification::CopyChosen])
+            .description(text.to_string()),
+    )
 }
 
 /// CR 208.1 + CR 113.7: Parse the dynamic referent of a "{X} … less to activate,
@@ -256,10 +296,12 @@ fn parse_untaps_during_each_other_players_untap_step(
     tp: &TextPair<'_>,
     description: &str,
 ) -> Option<StaticDefinition> {
-    // "Untap all <type> you control during each other player's untap step."
-    // Delegate the subject to `parse_type_phrase`, which handles the full range
-    // of type + controller phrases.
-    if let Some(rest) = nom_tag_tp(tp, "untap all ") {
+    // "Untap all/each <type> you control during each other player's untap
+    // step." — Seedborn Muse prints "all"; Prop Room and Ivorytusk Fortress
+    // print "each" for the same subject shape, so both tags share this arm.
+    // Delegate the subject to `parse_type_phrase`, which handles the full
+    // range of type + controller + property phrases.
+    if let Some(rest) = nom_tag_tp(tp, "untap all ").or_else(|| nom_tag_tp(tp, "untap each ")) {
         let (filter, remainder) = parse_type_phrase(rest.original);
         let remainder_lower = remainder.to_lowercase();
         let during_ok = nom_on_lower(
@@ -601,10 +643,12 @@ pub(crate) fn parse_damage_not_removed_during_cleanup(
 /// block this creature." — a can't-be-blocked-by restriction whose blocker
 /// filter gates on a power threshold that may be DYNAMIC (Kraken of the Straits:
 /// "Creatures with power less than the number of Islands you control can't block
-/// this creature."). Sibling of `parse_source_power_block_restriction` (which
-/// fixes the threshold to `~'s power` and targets `creatures you control`); this
-/// arm accepts any `parse_target` power-comparison filter — including a dynamic
-/// `ObjectCount` threshold — and targets the source itself. Without it the
+/// this creature."). Sibling of the general "<subject> can't block <object>"
+/// production in `parse_subject_combat_rule_static`, which owns every FILTERED
+/// object but declines a self-referential one; this arm covers exactly that
+/// declined case. It accepts any `parse_target` power-comparison filter —
+/// including a dynamic `ObjectCount` threshold — and targets the source
+/// itself, keeping `affected` tight. Without it the
 /// subject-first "creatures with power … can't block this creature" wording
 /// mis-dispatches to a bare `CantBlock { SelfRef }` (source can't block), which
 /// is the inverse of the intended restriction.
@@ -703,6 +747,20 @@ pub(crate) fn parse_static_line_inner(
     let text = strip_reminder_text(text);
     let lower = text.to_lowercase();
     let tp = TextPair::new(&text, &lower);
+
+    if let Some(def) = parse_same_is_true_type_static(&text, &lower) {
+        return Some(def);
+    }
+    if is_same_is_true_type_static_candidate(&text, &lower) {
+        // The dedicated all-consuming parser recognized this as a malformed
+        // continuation. Fail closed so a battlefield-only legacy parser cannot
+        // silently drop the unmodeled tail; the document dispatcher will retain
+        // the full line as an honest `Unimplemented` residual.
+        return None;
+    }
+    if let Some(def) = parse_inverted_base_pt_type_grant(&text, &raw_lower) {
+        return Some(def);
+    }
 
     if let Some(def) = parse_arcane_adaptation_chosen_type_static(&tp, &text) {
         return Some(def);
@@ -1049,11 +1107,24 @@ pub(crate) fn parse_static_line_inner(
         return Some(result);
     }
 
+    // CR 118.9 + CR 601.2b: "[Once during each of your turns, ]you may cast
+    // [filter] by paying life equal to its mana value rather than paying its
+    // mana cost." Demon of Fate's Design class. Must precede the free-cast
+    // handler below because both match "you may cast" prefix, but this shape
+    // has "by paying" (alternative cost) not "without paying" (free cast).
+    if let Some(result) = parse_cast_by_paying_life_alt_cost(&text) {
+        return Some(result);
+    }
+
     // CR 601.2b + CR 118.9a + CR 601.2: Omniscience-class restricted free-cast
     // static. Optional " from your hand" zone qualifier — Dracogenesis's
     // "you may cast Dragon spells without paying their mana costs" relies on
     // CR 601.2's implicit hand zone.
     if let Some(result) = try_parse_cast_free_permission(&text, &lower) {
+        return Some(result);
+    }
+
+    if let Some(result) = try_parse_unspent_mana_loss_causes_life_loss_static(&text, &lower) {
         return Some(result);
     }
 
@@ -1209,6 +1280,14 @@ pub(crate) fn parse_static_line_inner(
     if let Some(def) = parse_becomes_equipment_with_ability(&tp, &text) {
         return Some(def);
     }
+    // CR 707.2c + CR 613.1a + CR 303.4: "Enchanted <subject> is a copy of the
+    // chosen <type>" — Metamorphic Alteration's companion static. Must precede
+    // `parse_enchanted_is_type`, whose "is a <type>" copula would otherwise try
+    // (and fail) to read "copy" as a card type.
+    if let Some(def) = parse_enchanted_is_copy_of_chosen(&tp, &text) {
+        return Some(def);
+    }
+
     // CR 613.1d + CR 205.1a: "Enchanted [permanent-type] is a [type] [with base P/T N/N]
     // [in addition to its other types]" — type-changing aura effects.
     // Must come before the basic-land-type handler which is a subset of this pattern.
@@ -1353,6 +1432,16 @@ pub(crate) fn parse_static_line_inner(
 
     // --- "All creatures get/have ..." ---
     if let Some(rest) = nom_tag_tp(&tp, "all creatures ") {
+        // CR 105.2 + CR 613.1f: "All creatures are [color] and <keyword|pump>"
+        // (Onakke Catacomb: "... are black and have deathtouch") is a color-
+        // defining static composed with modifications — route it to the color
+        // path first, which peels the color and composes the trailing keyword/
+        // pump. `parse_continuous_gets_has` would match only the "have <keyword>"
+        // tail and silently drop the color. A bare gets/has line (no leading
+        // color) leaves the color path declining, so it still resolves below.
+        if let Some(def) = parse_all_subject_are_color(&tp, &text) {
+            return Some(def);
+        }
         if let Some(def) = parse_continuous_gets_has(
             rest.original,
             TargetFilter::Typed(TypedFilter::creature()),
@@ -1365,6 +1454,15 @@ pub(crate) fn parse_static_line_inner(
     // CR 205.1a: "All permanents are [type] in addition to their other types."
     // Global type-addition effect (e.g., Mycosynth Lattice, Enchanted Evening).
     if let Some(def) = parse_all_permanents_are_type(&tp, &text) {
+        return Some(def);
+    }
+
+    // CR 611.3 + CR 105.3 + CR 613.1e: multi-zone Oxford compound color static —
+    // "All cards that aren't on the battlefield, spells, and permanents are
+    // <color predicate>" (Painter's Servant / Mycosynth Lattice). Must precede
+    // `parse_all_subject_are_color` / `parse_subject_is_color` so the Oxford
+    // subject is never partial-claimed by the single-subject color paths.
+    if let Some(def) = parse_compound_multi_zone_color_static(&tp, &text) {
         return Some(def);
     }
 
@@ -1389,6 +1487,18 @@ pub(crate) fn parse_static_line_inner(
     // land-type words, so this is order-safe here; it precedes `parse_land_type_change`
     // so "All lands are basic" (supertype) is not probed as a land-type line.
     if let Some(def) = parse_subject_is_supertype(&tp, &text) {
+        return Some(def);
+    }
+
+    // CR 508.1d + CR 604.1: "<subject> attacks <player-class> each combat if able
+    // [unless ...]" — a static attack requirement whose required defender is a
+    // live-evaluated player class (Galactus: "an opponent with the most life among
+    // your opponents ... unless you control a creature named ..."). Richer than the
+    // bare scoped must-attack below: the selector form is disjoint (returns None
+    // without a defender phrase), and the wrapper's flavor-label strip is a
+    // retry-on-failure (never fires when the body already parses), so ordering
+    // before `try_parse_scoped_must_attack_block` is safe.
+    if let Some(def) = parse_forced_attack_defender_static(&text) {
         return Some(def);
     }
 
@@ -2158,10 +2268,6 @@ pub(crate) fn parse_static_line_inner(
         return Some(def);
     }
 
-    if let Some(def) = parse_source_power_block_restriction(&text) {
-        return Some(def);
-    }
-
     if let Some(def) = parse_power_threshold_block_restriction(&text) {
         return Some(def);
     }
@@ -2292,6 +2398,14 @@ pub(crate) fn parse_static_line_inner(
         return Some(def);
     }
 
+    // --- "<subject> can't activate <type>s' loyalty abilities" ---
+    // CR 602.5 + CR 606.2: The Immortal Sun — subject-first loyalty-activation
+    // prohibition. Distinct prefix from the "activated abilities of <filter>"
+    // form above; narrows to loyalty abilities via `kind = Some(Loyalty)`.
+    if let Some(def) = parse_subject_cant_activate_loyalty(&tp, &text) {
+        return Some(def);
+    }
+
     // --- "~ can be attached only to {filter}" ---
     // CR 301.5 + CR 303.4 + CR 701.3a: Positive attachment restriction on an
     // Aura/Equipment — the source can only attach to a host matching the parsed
@@ -2306,6 +2420,13 @@ pub(crate) fn parse_static_line_inner(
     // prohibition — the "can't" effect takes precedence over any effect directing
     // a search — where `cause` identifies whose spells/abilities are muzzled.
     if let Some(def) = parse_cant_search_library(&tp, &text) {
+        return Some(def);
+    }
+
+    // CR 723.1a + CR 723.5: search-scoped player control is a non-layer static;
+    // its runtime consumer snapshots the newest applicable authority when the
+    // search begins.
+    if let Some(def) = parse_control_players_during_own_library_search(&tp, &text) {
         return Some(def);
     }
 
@@ -2344,6 +2465,8 @@ pub(crate) fn parse_static_line_inner(
             who: ProhibitionScope::AllPlayers,
             source_filter: TargetFilter::SelfRef,
             exemption,
+            // CR 606.2: self-reference form blocks any activated ability.
+            kind: None,
         })
         .affected(TargetFilter::SelfRef)
         .description(text.to_string());
@@ -2918,7 +3041,7 @@ pub(crate) fn parse_static_line_inner(
     // runtime gate matches `keyword == "loyalty"` against a loyalty ability's cost.
     // Combinator: prefix → subject → " cost {N} " → direction. The subject is
     // either the chosen-name source phrase (→ HasChosenName) or a type phrase.
-    if let Some(((amount_n, is_x, mode, subject_filter, dynamic_count, keyword), _)) =
+    if let Some(((amount_n, is_x, mode, subject_filter, dynamic_count, keyword, exemption), _)) =
         nom_on_lower(tp.original, tp.lower, |i| {
             // CR 601.2f + CR 606.1: shared grammar head (also used by the transient
             // this-turn form, which lowers to a `GenericEffect` carrying this same
@@ -2929,6 +3052,10 @@ pub(crate) fn parse_static_line_inner(
             // CR 208.1 + CR 113.7: optional dynamic referent for `{X}`
             // ("where X is ~'s power", Agatha).
             let (i, dynamic_count) = opt(parse_where_x_is_self_stat).parse(i)?;
+            // CR 605.1a: consume the optional mana-ability carve-out at the
+            // source-scoped grammar boundary, accepting both apostrophe forms.
+            let (i, exemption) =
+                opt(super::shared::parse_mana_ability_exemption_suffix).parse(i)?;
             Ok((
                 i,
                 (
@@ -2938,6 +3065,7 @@ pub(crate) fn parse_static_line_inner(
                     subject.to_string(),
                     dynamic_count,
                     keyword,
+                    exemption,
                 ),
             ))
         })
@@ -2967,7 +3095,11 @@ pub(crate) fn parse_static_line_inner(
                     amount,
                     minimum_mana,
                     dynamic_count,
-                    exemption: ActivationExemption::None,
+                    exemption: if exemption.is_some() {
+                        ActivationExemption::ManaAbilities
+                    } else {
+                        ActivationExemption::None
+                    },
                     // Source-scoped ("Activated/Loyalty abilities of <filter>"):
                     // scope is the `affected` filter below; no activator gate.
                     activator: None,
@@ -2979,11 +3111,14 @@ pub(crate) fn parse_static_line_inner(
     }
 
     // --- "Activated abilities cost {N} less/more to activate [unless they're mana abilities]" (global)
-    // --- "Abilities you activate [that aren't mana abilities] cost {N} less/more to activate" (activator) ---
-    // CR 601.2f + CR 118.7 + CR 605.1a: Unscoped (Suppression Field: "Activated
-    // abilities cost {2} more to activate unless they're mana abilities") or
-    // activator-scoped (Zirda, the Dawnwaker: "Abilities you activate that aren't
-    // mana abilities cost {2} less to activate") activated-ability cost modifier.
+    // --- "Abilities [you|your opponents] activate [that aren't mana abilities] cost {N} less/more to activate" (activator) ---
+    // CR 601.2f + CR 118.7 + CR 605.1a + CR 602.2: Unscoped (Suppression Field:
+    // "Activated abilities cost {2} more to activate unless they're mana
+    // abilities"), controller-activator (Zirda, the Dawnwaker: "Abilities you
+    // activate that aren't mana abilities cost {2} less to activate"), or
+    // opponent-activator (Tithe Taker: "abilities your opponents activate cost
+    // {1} more to activate unless they're mana abilities") activated-ability cost
+    // modifier.
     // The scoped "Activated abilities OF <subject>" form is owned by the branch
     // above; this handles the two subjects that carry no "of <subject>" filter.
     // `keyword == "activated"` matches every activated ability at runtime; the
@@ -2998,6 +3133,27 @@ pub(crate) fn parse_static_line_inner(
     if let Some(((activator, exemption, amount, mode), _)) =
         nom_on_lower(tp.original, tp.lower, |i| {
             let (i, (activator, prefix_exempt)) = alt((
+                // CR 602.2: opponent-activator scope — "abilities your opponents
+                // activate" (Tithe Taker) keys the adjustment off an OPPONENT of
+                // the static's controller activating the ability, not the
+                // controller. The runtime resolves `PlayerFilter::Opponent`
+                // against the static's controller (`is_opponent`) in
+                // `apply_one_reduce_ability_cost`. Ordered before the "you
+                // activate" arm so the longer, more specific subject is tried
+                // first. The target-restricted sibling (Kopala, Warden of Waves:
+                // "…activate that target a Merfolk you control cost {2}…") is NOT
+                // covered here — its intervening target clause breaks " cost {"
+                // and the branch declines (fail-closed); modeling that filter on
+                // `ReduceAbilityCost` is a separate runtime change.
+                map(
+                    (
+                        tag("abilities your opponents activate"),
+                        opt(tag(" that aren't mana abilities")),
+                    ),
+                    |(_, exempt): (&str, Option<&str>)| {
+                        (Some(PlayerFilter::Opponent), exempt.is_some())
+                    },
+                ),
                 map(
                     (
                         tag("abilities you activate"),
@@ -3239,14 +3395,27 @@ pub(crate) fn parse_static_line_inner(
     }
 
     // --- "As long as ..." (generic conditional static, no comma separator) ---
+    // CR 604.1 + CR 611.3a: a static's "as long as" gate is simply true or false
+    // at any moment, so the condition must be TYPED whenever the parser can type
+    // it. `StaticCondition::Unrecognized` is evaluated as always-true by the
+    // layer system, silently converting a conditional static into an
+    // unconditional one — reserve it for text the condition authority genuinely
+    // cannot decompose. Delegate to `parse_static_condition` (→
+    // `nom_condition::parse_inner_condition`, the single authority for
+    // game-state conditions) exactly as the four sibling arms above do.
+    // Recursion safety unchanged: `parse_inner_condition` never re-enters this
+    // parser. `parse_static_condition` enforces full consumption, so this can
+    // only NARROW the set of lines that end up `Unrecognized`, never widen it.
     if let Some(rest_tp) = nom_tag_tp(&tp, "as long as ") {
         let condition_text = rest_tp.original.trim_end_matches('.');
+        let condition =
+            parse_static_condition(condition_text).unwrap_or(StaticCondition::Unrecognized {
+                text: condition_text.to_string(),
+            });
         return Some(
             StaticDefinition::continuous()
                 .affected(TargetFilter::SelfRef)
-                .condition(StaticCondition::Unrecognized {
-                    text: condition_text.to_string(),
-                })
+                .condition(condition)
                 .description(text.to_string()),
         );
     }

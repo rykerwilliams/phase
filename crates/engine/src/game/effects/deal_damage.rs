@@ -28,6 +28,10 @@ use crate::types::proposed_event::ProposedEvent;
 #[derive(Clone, Copy)]
 pub(crate) struct DamageContext {
     pub(crate) source_id: ObjectId,
+    /// CR 400.7: The source incarnation observed before the damage event is
+    /// applied. This remains authoritative if the source changes zones while a
+    /// replacement effect pauses the event.
+    pub(crate) source_incarnation: Option<u64>,
     pub(crate) controller: PlayerId,
     pub(crate) source_is_creature: bool,
     pub(crate) has_deathtouch: bool,
@@ -128,14 +132,59 @@ fn resolve_effect_recipients(
     if matches!(target_filter, TargetFilter::SelfRef) {
         return vec![TargetRef::Object(ability.source_id)];
     }
+    // CR 615.5 + CR 120.1: the prevented event's damage source object (Comeuppance
+    // reflecting to "that creature"). An OBJECT context ref — resolved here (not
+    // via `player_context_target`, which only projects players) before the
+    // `ability.targets` fallback, since the reflection rider carries no targets.
+    if matches!(target_filter, TargetFilter::PostReplacementDamageSource) {
+        return state
+            .post_replacement_event_source()
+            .map(|id| vec![TargetRef::Object(id)])
+            .unwrap_or_default();
+    }
     if let Some(target) = player_context_target(state, ability, target_filter) {
         return vec![target];
     }
+    // CR 608.2c: An inherited target-slot anaphor belongs to the flattened
+    // resolving root, not this local damage node.  Resolve it before the local
+    // target fallback because a chained node can carry propagated recipient
+    // targets while still referring to an earlier slot (Self-Destruct class).
+    if let TargetFilter::ParentTargetSlot { index } = target_filter {
+        return crate::game::targeting::resolve_parent_slot_from_root(state, ability, *index)
+            .into_iter()
+            .collect();
+    }
+    // CR 400.7 + CR 603.7c: a delayed damage effect whose pinned referent became
+    // a new object deals it no damage. This is a RAW read that never reaches
+    // `resolved_targets`, so the targeting chokepoint cannot see this pin.
+    //
+    // THE `is_empty()` GATE STAYS RAW, AND THAT IS LOAD-BEARING — it is the
+    // reason no early return is needed here. "Targets were declared" and
+    // "declared targets are still live" are different questions. Gating on the
+    // raw list means an all-stale ability still ENTERS this branch and returns
+    // an empty recipient list, an inert no-op. Substituting the gate itself
+    // would make it fall through to the `Controller` fallback below and deal
+    // the damage to a PLAYER instead — precisely the `searing blood` shape the
+    // Tier C exclusion list warns about (its 14 Controller/Owner-only cards are
+    // additionally denied pins upstream, so this can only ever fail safe).
     if !ability.targets.is_empty() {
         if skip_first_target && ability.targets.len() > 1 {
-            return ability.targets[1..].to_vec();
+            // The positional split runs on the RAW list and the pin filter is
+            // applied AFTER it — never the other way round. `[1..]` encodes slot
+            // identity (`[source_0, …, recipient]`), so filtering first could
+            // renumber a live recipient into the source position. This is the
+            // same constraint as §5.4(b)'s `ParentTargetSlot` carve-out, applied
+            // to this file's own positional convention.
+            return ability.targets[1..]
+                .iter()
+                .filter(|target| match target {
+                    TargetRef::Object(id) => ability.target_pin_is_current(*id, state),
+                    TargetRef::Player(_) => true,
+                })
+                .cloned()
+                .collect();
         }
-        return ability.targets.clone();
+        return ability.live_object_targets(state);
     }
     match target_filter {
         TargetFilter::Controller => vec![TargetRef::Player(ability.controller)],
@@ -149,6 +198,7 @@ impl DamageContext {
     pub(crate) fn from_source(state: &GameState, source_id: ObjectId) -> Option<Self> {
         state.objects.get(&source_id).map(|obj| Self {
             source_id,
+            source_incarnation: Some(obj.incarnation),
             controller: obj.controller,
             source_is_creature: obj.card_types.core_types.contains(&CoreType::Creature),
             // CR 613.1f + CR 702.2 + CR 702.15 + CR 702.80 + CR 702.90:
@@ -195,6 +245,7 @@ impl DamageContext {
     pub(crate) fn fallback(source_id: ObjectId, controller: PlayerId) -> Self {
         Self {
             source_id,
+            source_incarnation: None,
             controller,
             source_is_creature: false,
             has_deathtouch: false,
@@ -213,6 +264,7 @@ impl From<DamageContextSnapshot> for DamageContext {
     fn from(snapshot: DamageContextSnapshot) -> Self {
         Self {
             source_id: snapshot.source_id,
+            source_incarnation: snapshot.source_incarnation,
             controller: snapshot.controller,
             source_is_creature: snapshot.source_is_creature,
             has_deathtouch: snapshot.has_deathtouch,
@@ -233,6 +285,7 @@ impl From<&DamageContext> for DamageContextSnapshot {
     fn from(ctx: &DamageContext) -> Self {
         Self {
             source_id: ctx.source_id,
+            source_incarnation: ctx.source_incarnation,
             controller: ctx.controller,
             source_is_creature: ctx.source_is_creature,
             has_deathtouch: ctx.has_deathtouch,
@@ -549,14 +602,15 @@ pub(crate) fn apply_damage_after_replacement(
                 // counters. Route through the player-counter replacement pipeline
                 // so "players can't get poison counters" / poison-doublers apply;
                 // the actor is the source's controller.
-                if !player_counter::add_player_counter_with_replacement(
+                if player_counter::add_player_counter_with_replacement(
                     state,
                     ctx.controller,
                     *player_id,
                     PlayerCounterKind::Poison,
                     actual_amount,
                     events,
-                ) {
+                ) == player_counter::PlayerCounterAdditionOutcome::NeedsChoice
+                {
                     return DamageResult::NeedsChoice;
                 }
             } else {
@@ -564,7 +618,8 @@ pub(crate) fn apply_damage_after_replacement(
                 if super::life::apply_damage_life_loss(state, *player_id, actual_amount, events)
                     .is_err()
                 {
-                    // CR 614.7: Life loss replacement needs player choice.
+                    // CR 616.1: two or more co-applicable life-loss replacements — the
+                    // affected player must choose which applies first.
                     return DamageResult::NeedsChoice;
                 }
             }
@@ -577,14 +632,15 @@ pub(crate) fn apply_damage_after_replacement(
                 // when a creature deals combat damage to a player. Route through
                 // the player-counter replacement pipeline (prevention/doublers);
                 // the actor is the source's controller.
-                if !player_counter::add_player_counter_with_replacement(
+                if player_counter::add_player_counter_with_replacement(
                     state,
                     ctx.controller,
                     *player_id,
                     PlayerCounterKind::Poison,
                     ctx.combat_damage_poison,
                     events,
-                ) {
+                ) == player_counter::PlayerCounterAdditionOutcome::NeedsChoice
+                {
                     return DamageResult::NeedsChoice;
                 }
             }
@@ -700,17 +756,32 @@ pub(crate) fn apply_damage_after_replacement(
                 .map(|object| object.controller)
                 .unwrap_or(ctx.controller),
         };
+        // CR 400.7: Snapshot the target's incarnation at damage time so
+        // subsequent zone-change look-backs do not match a new incarnation.
+        let target_incarnation = match t {
+            TargetRef::Object(object_id) => state
+                .objects
+                .get(object_id)
+                .map(|object| object.incarnation),
+            TargetRef::Player(_) => None,
+        };
         // CR 608.2i + CR 608.2h: Snapshot the damage source's characteristics at
         // damage time so look-back source-filter queries ("opponents who were
         // dealt combat damage by ~ or a Dragon this turn") evaluate against the
         // source as it was when the damage was dealt — the source may later
         // change type, leave the battlefield (CR 113.7a LKI), or be removed.
         let src = state.objects.get(&ctx.source_id);
+        // CR 400.7: Use the incarnation captured with the damage context, not
+        // a post-application live lookup. The latter can name a later object
+        // after a replacement pause or zone change.
+        let source_incarnation = ctx.source_incarnation;
         let mut record = DamageRecord {
             source_id: ctx.source_id,
             source_controller: ctx.controller,
             target: t.clone(),
             target_controller,
+            target_incarnation,
+            source_incarnation,
             // CR 120.4a: the permanent was dealt only the lethal portion; the
             // excess is recorded against the controller by the redirect below.
             amount: primary_amount,
@@ -847,7 +918,8 @@ pub(crate) fn apply_damage_after_replacement(
             && lifelink_amount > 0
             && super::life::apply_life_gain(state, ctx.controller, lifelink_amount, events).is_err()
         {
-            // CR 614.7: Life-gain replacement needs a player choice. All damage has
+            // CR 616.1: two or more co-applicable life-gain replacements — the gaining
+            // player must choose which applies first. All damage has
             // already been dealt; only this final lifelink gain is deferred.
             return DamageResult::NeedsChoice;
         }
@@ -930,7 +1002,10 @@ fn stash_remaining_post_replacement_damage(
         .filter_map(|(ctx, event)| build_post_replacement_damage_node(ctx, event));
     let Some(mut head) = iter.next() else {
         if let Some(sub) = ability.sub_ability.as_ref() {
-            append_to_pending_continuation(state, Some(Box::new(sub.as_ref().clone())));
+            append_to_pending_continuation(
+                state,
+                Some(Box::new(cast_tail_with_parent_targets(sub, ability))),
+            );
         }
         return;
     };
@@ -939,7 +1014,7 @@ fn stash_remaining_post_replacement_damage(
         append_to_sub_chain(&mut head, node);
     }
     if let Some(sub) = ability.sub_ability.as_ref() {
-        append_to_sub_chain(&mut head, sub.as_ref().clone());
+        append_to_sub_chain(&mut head, cast_tail_with_parent_targets(sub, ability));
     }
     append_to_pending_continuation(state, Some(Box::new(head)));
 }
@@ -961,7 +1036,10 @@ fn stash_remaining_damage_chain(
         // No remaining batch work — still forward the parent's sub_ability so the
         // downstream chain resumes after the pending replacement choice resolves.
         if let Some(sub) = ability.sub_ability.as_ref() {
-            append_to_pending_continuation(state, Some(Box::new(sub.as_ref().clone())));
+            append_to_pending_continuation(
+                state,
+                Some(Box::new(cast_tail_with_parent_targets(sub, ability))),
+            );
         }
         return;
     };
@@ -973,9 +1051,32 @@ fn stash_remaining_damage_chain(
         append_to_sub_chain(&mut head, node);
     }
     if let Some(sub) = ability.sub_ability.as_ref() {
-        append_to_sub_chain(&mut head, sub.as_ref().clone());
+        append_to_sub_chain(&mut head, cast_tail_with_parent_targets(sub, ability));
     }
     append_to_pending_continuation(state, Some(Box::new(head)));
+}
+
+/// CR 608.2c + CR 616.1e: Clone a damage effect's `sub_ability` tail for a
+/// paused-continuation stash (shared by every `stash_*` pause helper in this
+/// module), carrying the parent's object referent (e.g. Lady Loki's injected
+/// exile-until hit) into the re-parented tail — but ONLY when the non-pause path
+/// would have propagated it. Gating by the exact same
+/// `should_propagate_parent_targets` predicate `resolve_ability_chain` uses
+/// makes every pause path CONVERGE with the non-pause path: for a plain
+/// multi-target `DealDamage` whose sub is `Resolution`-timed or
+/// `ExiledBySource`-scoped (or that carries its own targets), the guard returns
+/// false and no object target leaks; for Lady Loki's `CastFromZone
+/// { target: ParentTarget }` tail (empty targets, non-`Resolution` timing) it
+/// returns true and the hit is preserved so the free cast still addresses it.
+fn cast_tail_with_parent_targets(
+    sub: &ResolvedAbility,
+    ability: &ResolvedAbility,
+) -> ResolvedAbility {
+    let mut tail = sub.clone();
+    if crate::game::effects::should_propagate_parent_targets(ability, &tail) {
+        tail.targets = ability.targets.clone();
+    }
+    tail
 }
 
 /// CR 120.4b + CR 616.1e: Stash a two-part continuation for an
@@ -1019,10 +1120,13 @@ fn stash_each_source_combined_continuation(
         match head_opt.as_mut() {
             None => {
                 // Nothing to stash — forward sub_ability so downstream fires.
-                append_to_pending_continuation(state, Some(Box::new(sub.as_ref().clone())));
+                append_to_pending_continuation(
+                    state,
+                    Some(Box::new(cast_tail_with_parent_targets(sub, ability))),
+                );
                 return;
             }
-            Some(h) => append_to_sub_chain(h, sub.as_ref().clone()),
+            Some(h) => append_to_sub_chain(h, cast_tail_with_parent_targets(sub, ability)),
         }
     }
 
@@ -1050,7 +1154,10 @@ fn stash_remaining_each_source_damage(
         // No remaining batch work — forward the parent's sub_ability so the
         // downstream chain resumes after the pending replacement choice resolves.
         if let Some(sub) = ability.sub_ability.as_ref() {
-            append_to_pending_continuation(state, Some(Box::new(sub.as_ref().clone())));
+            append_to_pending_continuation(
+                state,
+                Some(Box::new(cast_tail_with_parent_targets(sub, ability))),
+            );
         }
         return;
     };
@@ -1062,7 +1169,7 @@ fn stash_remaining_each_source_damage(
         append_to_sub_chain(&mut head, node);
     }
     if let Some(sub) = ability.sub_ability.as_ref() {
-        append_to_sub_chain(&mut head, sub.as_ref().clone());
+        append_to_sub_chain(&mut head, cast_tail_with_parent_targets(sub, ability));
     }
     append_to_pending_continuation(state, Some(Box::new(head)));
 }
@@ -1545,7 +1652,41 @@ pub fn resolve_all(
 
     // Collect matching object IDs.
     // CR 107.3a + CR 601.2b: ability-context filter evaluation.
-    let ctx = filter::FilterContext::from_ability(ability);
+    //
+    // CR 120.1 + CR 601.2c: When `damage_source` is `Some(Target)`, "other"/
+    // "another"-relative recipient filters (`FilterProp::Another` — "each
+    // OTHER creature") must be evaluated relative to the resolved damage
+    // SOURCE creature, not the ability's nominal source (the spell/permanent
+    // that generated this `DamageAll` effect). Left as `ability.source_id`,
+    // `FilterProp::Another` compares each battlefield candidate against the
+    // spell's own object id — which is never itself a battlefield creature —
+    // so the exclusion never actually fires and the chosen source creature
+    // wrongly deals damage to itself (Chandra's Ignition class: "target
+    // creature you control deals damage ... to each other creature").
+    // Mirrors the damage-source resolution below (used for keyword/
+    // protection purposes); rebinding it here too keeps recipient-set
+    // membership consistent with which object CR 120.1 says the damage is
+    // actually FROM.
+    // Only the resolved damage source's OBJECT identity is overridden here —
+    // `source_controller` is deliberately left as `FilterContext::from_ability`
+    // set it (the ability's own controller). Per `FilterContext`'s own
+    // documented invariant (`filter.rs`), `source_controller` is what
+    // `ControllerRef::You` ("creatures you control") resolves against, and
+    // that pronoun refers to the ABILITY's controller (who cast the spell) —
+    // not to whoever happens to control the resolved damage source (e.g. a
+    // stolen creature dealing the damage). An earlier version of this fix
+    // also overrode `source_controller`, which made "you control" resolve
+    // against the wrong player whenever the resolved source's controller
+    // differs from the caster.
+    let mut ctx = filter::FilterContext::from_ability(ability);
+    if matches!(damage_source, Some(DamageSource::Target)) {
+        if let Some(resolved_source_id) = ability.targets.iter().find_map(|t| match t {
+            TargetRef::Object(id) => Some(*id),
+            _ => None,
+        }) {
+            ctx.source_id = resolved_source_id;
+        }
+    }
     let matching_objects: Vec<_> = state
         .battlefield
         .iter()
@@ -1866,6 +2007,30 @@ fn collect_matching_players(
                         )
                         .is_some_and(|lhs| comparator.evaluate(lhs, threshold))
                     }
+                    // CR 608.2c + CR 608.2h + CR 109.4: candidate satisfies both
+                    // `relation` and possession of a member of the most recent
+                    // tracked object set. Delegates to the shared authority.
+                    PlayerFilter::TrackedSetPossessor {
+                        ref relation,
+                        ref possession,
+                        ref filter,
+                        ref caused_by,
+                    } => {
+                        crate::game::players::matches_relation(
+                            state,
+                            p.id,
+                            source_controller,
+                            *relation,
+                        ) && crate::game::quantity::possessed_tracked_set_member(
+                            state,
+                            p.id,
+                            *possession,
+                            filter,
+                            *caused_by,
+                            source_controller,
+                            source_id,
+                        )
+                    }
                 }
         })
         .map(|p| p.id)
@@ -2109,18 +2274,46 @@ pub fn resolve_each_player(
                         )
                         .is_some_and(|lhs| comparator.evaluate(lhs, threshold))
                     }
+                    // CR 608.2c + CR 608.2h + CR 109.4: candidate satisfies both
+                    // `relation` and possession of a member of the most recent
+                    // tracked object set. Delegates to the shared authority.
+                    PlayerFilter::TrackedSetPossessor {
+                        relation,
+                        possession,
+                        filter,
+                        caused_by,
+                    } => {
+                        crate::game::players::matches_relation(
+                            state,
+                            p.id,
+                            ability.controller,
+                            *relation,
+                        ) && crate::game::quantity::possessed_tracked_set_member(
+                            state,
+                            p.id,
+                            *possession,
+                            filter,
+                            *caused_by,
+                            ability.controller,
+                            ability.source_id,
+                        )
+                    }
                 }
         })
         .map(|p| p.id)
         .collect();
 
     for (i, pid) in player_ids.iter().enumerate() {
-        // CR 120.3: Resolve quantity scoped to this player.
-        let dmg = crate::game::quantity::resolve_quantity_scoped(
+        // CR 120.3: Resolve quantity scoped to this player. Thread the ability's
+        // object targets so an `ObjectManaValue { scope: Target }` leaf (Lady
+        // Loki's "that nonland card's mana value" — the injected exile-until hit)
+        // resolves against the hit rather than to 0.
+        let dmg = crate::game::quantity::resolve_quantity_scoped_with_targets(
             state,
             amount_expr,
             ability.source_id,
             *pid,
+            &ability.targets,
         )
         .max(0) as u32;
         if dmg > 0 {
@@ -2134,13 +2327,19 @@ pub fn resolve_each_player(
                     let remaining: Vec<(TargetRef, u32)> = player_ids[i + 1..]
                         .iter()
                         .filter_map(|&next_pid| {
-                            let next_dmg = crate::game::quantity::resolve_quantity_scoped(
-                                state,
-                                amount_expr,
-                                ability.source_id,
-                                next_pid,
-                            )
-                            .max(0) as u32;
+                            // Thread `ability.targets` here too — otherwise every
+                            // opponent AFTER the first (once a replacement pause
+                            // occurs) would pre-resolve an `ObjectManaValue
+                            // { scope: Target }` leaf to 0.
+                            let next_dmg =
+                                crate::game::quantity::resolve_quantity_scoped_with_targets(
+                                    state,
+                                    amount_expr,
+                                    ability.source_id,
+                                    next_pid,
+                                    &ability.targets,
+                                )
+                                .max(0) as u32;
                             (next_dmg > 0).then_some((TargetRef::Player(next_pid), next_dmg))
                         })
                         .collect();
@@ -2289,8 +2488,19 @@ pub fn resolve_each_source_deals_damage(
         }
     };
 
-    // CR 608.2: the amount is uniform across every source — resolve it once.
-    let amt = resolve_quantity_with_targets(state, amount, ability).max(0) as u32;
+    // CR 608.2: the amount is uniform across every source — resolve it once —
+    // UNLESS the amount reads the per-source `BatchSource` scope (CR 120.1:
+    // "deals damage equal to its power" resolves per source object, never
+    // against the ability source).
+    let per_source = crate::game::quantity::quantity_expr_contains_scope(
+        amount,
+        crate::types::ability::ObjectScope::BatchSource,
+    );
+    let amt_uniform = if per_source {
+        0
+    } else {
+        resolve_quantity_with_targets(state, amount, ability).max(0) as u32
+    };
 
     // CR 608.2 + CR 120.1: evaluate the source class against the battlefield at
     // resolution (mirrors `resolve_all`). Each matching object is an independent
@@ -2319,26 +2529,41 @@ pub fn resolve_each_source_deals_damage(
     // recipient so combined lethal/excess is computed once all sources have
     // marked). Each source carries its OWN `DamageContext` (CR 120.1 identity).
     let mut entries: Vec<(ObjectId, DamageContext, TargetRef, u32)> = Vec::new();
-    if amt > 0 {
-        for &source_id in &source_ids {
-            let ctx = DamageContext::from_source(state, source_id)
-                .unwrap_or_else(|| DamageContext::fallback(source_id, ability.controller));
-            match recipient {
-                EachDamageRecipient::Shared(_) => {
-                    for recip in &shared_recipients {
-                        entries.push((source_id, ctx, recip.clone(), amt));
-                    }
+    for &source_id in &source_ids {
+        // CR 120.1 + CR 608.2h: each batch member deals its OWN characteristic;
+        // resolved per source (live object, LKI fallback via the new scope's
+        // resolve arms — the same instant semantics as the one-time uniform
+        // resolution, but read against each batch member). Zero/sourceless
+        // members deal nothing (skip) — entry-set-equivalent to the uniform
+        // path's `if amt > 0` gate.
+        let amt = if per_source {
+            crate::game::quantity::resolve_quantity_with_targets_and_damage_source(
+                state, amount, ability, source_id,
+            )
+            .max(0) as u32
+        } else {
+            amt_uniform
+        };
+        if amt == 0 {
+            continue;
+        }
+        let ctx = DamageContext::from_source(state, source_id)
+            .unwrap_or_else(|| DamageContext::fallback(source_id, ability.controller));
+        match recipient {
+            EachDamageRecipient::Shared(_) => {
+                for recip in &shared_recipients {
+                    entries.push((source_id, ctx, recip.clone(), amt));
                 }
-                // CR 109.4 + CR 120.3a: each source deals to the player that
-                // controls it.
-                EachDamageRecipient::EachController => {
-                    let controller = state
-                        .objects
-                        .get(&source_id)
-                        .map(|obj| obj.controller)
-                        .unwrap_or(ctx.controller);
-                    entries.push((source_id, ctx, TargetRef::Player(controller), amt));
-                }
+            }
+            // CR 109.4 + CR 120.3a: each source deals to the player that
+            // controls it.
+            EachDamageRecipient::EachController => {
+                let controller = state
+                    .objects
+                    .get(&source_id)
+                    .map(|obj| obj.controller)
+                    .unwrap_or(ctx.controller);
+                entries.push((source_id, ctx, TargetRef::Player(controller), amt));
             }
         }
     }
@@ -2482,13 +2707,16 @@ fn stash_remaining_each_deals_chain(
     match head {
         Some(mut h) => {
             if let Some(sub) = ability.sub_ability.as_ref() {
-                append_to_sub_chain(&mut h, sub.as_ref().clone());
+                append_to_sub_chain(&mut h, cast_tail_with_parent_targets(sub, ability));
             }
             append_to_pending_continuation(state, Some(Box::new(h)));
         }
         None => {
             if let Some(sub) = ability.sub_ability.as_ref() {
-                append_to_pending_continuation(state, Some(Box::new(sub.as_ref().clone())));
+                append_to_pending_continuation(
+                    state,
+                    Some(Box::new(cast_tail_with_parent_targets(sub, ability))),
+                );
             }
         }
     }
@@ -2789,8 +3017,7 @@ mod tests {
             WaitingFor::ReplacementChoice { .. }
         ));
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("remaining source must be stashed while first source waits");
         assert_eq!(
             cont.parent_kind,
@@ -2830,12 +3057,330 @@ mod tests {
         );
         assert!(matches!(state.waiting_for, WaitingFor::Priority { .. }));
         assert!(
-            state.pending_continuation.is_none(),
+            state.active_ability_continuation().is_none(),
             "continuation must be consumed after replacement resume"
         );
         assert!(
             parent_event_seen,
             "pause-and-resume path must emit the parent effect resolution event"
+        );
+    }
+
+    /// CR 120.3 + CR 616.1e + CR 202.3e: Lady Loki, Agent of Chaos — when a
+    /// `DamageEachPlayer` whose amount references BOTH the triggering spell
+    /// (`ObjectManaValue{EventSource}`) and the exile-until hit
+    /// (`ObjectManaValue{Target}`, injected into `ability.targets`) pauses on the
+    /// FIRST opponent's damage replacement, two things must survive the pause:
+    ///   * Finding 1 (site 2200): the REMAINING opponent's pre-resolved amount
+    ///     must thread `ability.targets`, so it is |MV(spell) − MV(hit)| = |4−1| =
+    ///     3, not the target-dropped |4−0| = 4.
+    ///   * Finding 2: the re-parented free-cast tail (`CastFromZone{ParentTarget}`)
+    ///     must carry the parent's object referent (the hit), so "you may cast that
+    ///     card" still addresses it after the pause.
+    #[test]
+    fn damage_each_player_replacement_pause_threads_targets_and_cast_tail() {
+        use crate::types::ability::{CardPlayMode, CastFromZoneDriver, PlayerFilter};
+        use crate::types::format::FormatConfig;
+        use crate::types::mana::{ManaCost, ManaCostShard};
+
+        let mut state = GameState::new(FormatConfig::standard(), 3, 7);
+        state.priority_player = PlayerId(0);
+        state.active_player = PlayerId(0);
+
+        let source = create_object(
+            &mut state,
+            CardId(10),
+            PlayerId(0),
+            "Lady Loki".to_string(),
+            Zone::Battlefield,
+        );
+
+        // The exiled triggering spell — EventSource, mana value 4 ({3}{R}).
+        let spell = create_object(
+            &mut state,
+            CardId(11),
+            PlayerId(0),
+            "Chaos Spell".to_string(),
+            Zone::Exile,
+        );
+        {
+            let obj = state.objects.get_mut(&spell).unwrap();
+            obj.mana_cost = ManaCost::Cost {
+                shards: vec![ManaCostShard::Red],
+                generic: 3,
+            };
+            obj.base_mana_cost = obj.mana_cost.clone();
+        }
+        state.current_trigger_event = Some(GameEvent::SpellCast {
+            card_id: CardId(11),
+            controller: PlayerId(0),
+            object_id: spell,
+            cast_mana_value: None,
+        });
+
+        // The exile-until hit — Target, mana value 1.
+        let hit = create_object(
+            &mut state,
+            CardId(12),
+            PlayerId(0),
+            "Nonland Hit".to_string(),
+            Zone::Exile,
+        );
+        {
+            let obj = state.objects.get_mut(&hit).unwrap();
+            obj.mana_cost = ManaCost::Cost {
+                shards: vec![],
+                generic: 1,
+            };
+            obj.base_mana_cost = obj.mana_cost.clone();
+        }
+
+        // Force the first opponent (P1) to pause on an optional damage replacement.
+        install_optional_damage_replacement(&mut state);
+
+        // The free-cast tail: CastFromZone { ParentTarget }, empty own targets so
+        // the parent-target propagation guard applies.
+        let cast_tail = ResolvedAbility::new(
+            Effect::CastFromZone {
+                target: TargetFilter::ParentTarget,
+                without_paying_mana_cost: true,
+                mode: CardPlayMode::Cast,
+                cast_transformed: false,
+                alt_ability_cost: None,
+                constraint: None,
+                duration: None,
+                driver: CastFromZoneDriver::DuringResolution,
+                mana_spend_permission: None,
+            },
+            vec![],
+            source,
+            PlayerId(0),
+        );
+
+        let mut ability = ResolvedAbility::new(
+            Effect::DamageEachPlayer {
+                amount: QuantityExpr::Difference {
+                    left: Box::new(QuantityExpr::Ref {
+                        qty: QuantityRef::ObjectManaValue {
+                            scope: ObjectScope::EventSource,
+                        },
+                    }),
+                    right: Box::new(QuantityExpr::Ref {
+                        qty: QuantityRef::ObjectManaValue {
+                            scope: ObjectScope::Target,
+                        },
+                    }),
+                },
+                player_filter: PlayerFilter::Opponent,
+            },
+            vec![TargetRef::Object(hit)],
+            source,
+            PlayerId(0),
+        );
+        ability.sub_ability = Some(Box::new(cast_tail));
+
+        let mut events = Vec::new();
+        resolve_each_player(&mut state, &ability, &mut events).unwrap();
+
+        // The first opponent paused on the optional replacement.
+        assert!(
+            matches!(state.waiting_for, WaitingFor::ReplacementChoice { .. }),
+            "first opponent must pause on the optional damage replacement, got {:?}",
+            state.waiting_for
+        );
+
+        let cont = state
+            .active_ability_continuation()
+            .expect("the remaining opponent + cast tail must be stashed while P1 waits");
+
+        // Finding 1 (site 2200): the remaining opponent (P2) pre-resolved to the
+        // FULL difference |4 − 1| = 3. Reverting the targets-threading at site 2200
+        // drops the hit and yields |4 − 0| = 4.
+        let summary = collect_chain_summary(&cont.chain);
+        assert_eq!(
+            summary,
+            vec![(source, TargetRef::Player(PlayerId(2)), 3)],
+            "only the remaining opponent (P2) must be stashed, with \
+             |MV(spell) − MV(hit)| = 3 — an extra re-stashed paused P1 entry, or a \
+             target-dropped pre-resolve of 4, must fail this"
+        );
+
+        // Finding 2: the re-parented free-cast tail carries the injected hit.
+        let mut cursor = Some(cont.chain.as_ref());
+        let mut cast_tail_targets = None;
+        while let Some(node) = cursor {
+            if matches!(node.effect, Effect::CastFromZone { .. }) {
+                cast_tail_targets = Some(node.targets.clone());
+                break;
+            }
+            cursor = node.sub_ability.as_deref();
+        }
+        assert_eq!(
+            cast_tail_targets,
+            Some(vec![TargetRef::Object(hit)]),
+            "the stashed CastFromZone tail must carry the exile-until hit as its \
+             ParentTarget referent (reverting the guarded pre-bind leaves it empty)"
+        );
+    }
+
+    /// CR 608.2c + CR 616.1e: the FALSE-branch pair for the propagation test above.
+    /// `cast_tail_with_parent_targets` gates on `should_propagate_parent_targets`,
+    /// which returns false for a `Resolution`-timed sub. When it does, the stashed
+    /// tail must NOT inherit the parent's object targets — otherwise a plain
+    /// multi-target `DealDamage` tail would silently gain the parent's referents on
+    /// a pause path and damage the wrong recipients. The parent carries TWO object
+    /// targets so a leak of either one fails the `is_empty()` assertion.
+    #[test]
+    fn damage_each_player_replacement_pause_does_not_leak_targets_to_resolution_sub() {
+        use crate::types::ability::{
+            CardPlayMode, CastFromZoneDriver, PlayerFilter, TargetChoiceTiming,
+        };
+        use crate::types::format::FormatConfig;
+        use crate::types::mana::{ManaCost, ManaCostShard};
+
+        let mut state = GameState::new(FormatConfig::standard(), 3, 7);
+        state.priority_player = PlayerId(0);
+        state.active_player = PlayerId(0);
+
+        let source = create_object(
+            &mut state,
+            CardId(10),
+            PlayerId(0),
+            "Lady Loki".to_string(),
+            Zone::Battlefield,
+        );
+
+        // The exiled triggering spell — EventSource, mana value 4 ({3}{R}).
+        let spell = create_object(
+            &mut state,
+            CardId(11),
+            PlayerId(0),
+            "Chaos Spell".to_string(),
+            Zone::Exile,
+        );
+        {
+            let obj = state.objects.get_mut(&spell).unwrap();
+            obj.mana_cost = ManaCost::Cost {
+                shards: vec![ManaCostShard::Red],
+                generic: 3,
+            };
+            obj.base_mana_cost = obj.mana_cost.clone();
+        }
+        state.current_trigger_event = Some(GameEvent::SpellCast {
+            card_id: CardId(11),
+            controller: PlayerId(0),
+            object_id: spell,
+            cast_mana_value: None,
+        });
+
+        // Two exile-until hits — both bound as object targets on the parent, so the
+        // guard has two referents that must NOT leak into the Resolution-timed sub.
+        let hit_a = create_object(
+            &mut state,
+            CardId(12),
+            PlayerId(0),
+            "Nonland Hit A".to_string(),
+            Zone::Exile,
+        );
+        let hit_b = create_object(
+            &mut state,
+            CardId(13),
+            PlayerId(0),
+            "Nonland Hit B".to_string(),
+            Zone::Exile,
+        );
+        for id in [hit_a, hit_b] {
+            let obj = state.objects.get_mut(&id).unwrap();
+            obj.mana_cost = ManaCost::Cost {
+                shards: vec![],
+                generic: 1,
+            };
+            obj.base_mana_cost = obj.mana_cost.clone();
+        }
+
+        // Force the first opponent (P1) to pause on an optional damage replacement.
+        install_optional_damage_replacement(&mut state);
+
+        // A Resolution-timed tail: the guard returns false, so its own (empty)
+        // targets must survive the stash. Marked as CastFromZone only so the chain
+        // walk below can pick it out from the remaining-opponent DealDamage nodes.
+        let mut cast_tail = ResolvedAbility::new(
+            Effect::CastFromZone {
+                target: TargetFilter::ParentTarget,
+                without_paying_mana_cost: true,
+                mode: CardPlayMode::Cast,
+                cast_transformed: false,
+                alt_ability_cost: None,
+                constraint: None,
+                duration: None,
+                driver: CastFromZoneDriver::DuringResolution,
+                mana_spend_permission: None,
+            },
+            vec![],
+            source,
+            PlayerId(0),
+        );
+        cast_tail.target_choice_timing = TargetChoiceTiming::Resolution;
+
+        let mut ability = ResolvedAbility::new(
+            Effect::DamageEachPlayer {
+                amount: QuantityExpr::Difference {
+                    left: Box::new(QuantityExpr::Ref {
+                        qty: QuantityRef::ObjectManaValue {
+                            scope: ObjectScope::EventSource,
+                        },
+                    }),
+                    right: Box::new(QuantityExpr::Ref {
+                        qty: QuantityRef::ObjectManaValue {
+                            scope: ObjectScope::Target,
+                        },
+                    }),
+                },
+                player_filter: PlayerFilter::Opponent,
+            },
+            vec![TargetRef::Object(hit_a), TargetRef::Object(hit_b)],
+            source,
+            PlayerId(0),
+        );
+        ability.sub_ability = Some(Box::new(cast_tail));
+
+        let mut events = Vec::new();
+        resolve_each_player(&mut state, &ability, &mut events).unwrap();
+
+        // Positive reach-guard: the pause fired and the remaining-opponent + tail
+        // chain was stashed, so the stashed-tail path was actually exercised.
+        assert!(
+            matches!(state.waiting_for, WaitingFor::ReplacementChoice { .. }),
+            "first opponent must pause on the optional damage replacement, got {:?}",
+            state.waiting_for
+        );
+        let cont = state
+            .active_ability_continuation()
+            .expect("the remaining opponent + Resolution-timed tail must be stashed");
+        let summary = collect_chain_summary(&cont.chain);
+        assert_eq!(
+            summary,
+            vec![(source, TargetRef::Player(PlayerId(2)), 3)],
+            "reach guard: the remaining opponent (P2) must be stashed with \
+             |MV(spell) − MV(hit)| = 3, proving the stashed-tail path ran"
+        );
+
+        // Negative assertion: the Resolution-timed tail keeps its own empty targets
+        // — the guard blocked propagation, so neither hit leaked into it.
+        let mut cursor = Some(cont.chain.as_ref());
+        let mut cast_tail_targets = None;
+        while let Some(node) = cursor {
+            if matches!(node.effect, Effect::CastFromZone { .. }) {
+                cast_tail_targets = Some(node.targets.clone());
+                break;
+            }
+            cursor = node.sub_ability.as_deref();
+        }
+        assert_eq!(
+            cast_tail_targets,
+            Some(Vec::new()),
+            "a Resolution-timed sub must NOT inherit the parent's object targets on \
+             the pause path (should_propagate_parent_targets returns false)"
         );
     }
 
@@ -3068,8 +3613,7 @@ mod tests {
             "first source's post-replacement damage applies before lifelink pauses"
         );
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("remaining post-replacement survivor must be stashed");
         match &cont.chain.effect {
             Effect::ApplyPostReplacementDamage {
@@ -3190,8 +3734,7 @@ mod tests {
             "first source's damage applies before lifelink gain pauses"
         );
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("remaining post-replacement source must be stashed");
         assert_eq!(
             cont.parent_kind,
@@ -3241,7 +3784,7 @@ mod tests {
         );
         assert!(matches!(state.waiting_for, WaitingFor::Priority { .. }));
         assert!(
-            state.pending_continuation.is_none(),
+            state.active_ability_continuation().is_none(),
             "continuation must be consumed after post-replacement survivor resumes"
         );
         assert!(
@@ -3532,6 +4075,50 @@ mod tests {
         assert_eq!(
             state.damage_dealt_this_turn[0].target_controller,
             PlayerId(1)
+        );
+        assert_eq!(
+            state.damage_dealt_this_turn[0].target_incarnation,
+            Some(state.objects[&target].incarnation)
+        );
+    }
+
+    #[test]
+    fn damage_record_keeps_the_context_source_incarnation() {
+        let mut state = GameState::new_two_player(42);
+        let source = create_object(
+            &mut state,
+            CardId(1),
+            PlayerId(0),
+            "Source".to_string(),
+            Zone::Battlefield,
+        );
+        let target = create_object(
+            &mut state,
+            CardId(2),
+            PlayerId(1),
+            "Target".to_string(),
+            Zone::Battlefield,
+        );
+        let ctx = DamageContext::from_source(&state, source).unwrap();
+        let source_incarnation = ctx.source_incarnation;
+
+        // CR 400.7: a replacement pause can resume after the source has become
+        // a new object. The already-created damage context remains authoritative.
+        state.objects.get_mut(&source).unwrap().incarnation += 1;
+
+        let event = ProposedEvent::Damage {
+            source_id: source,
+            target: TargetRef::Object(target),
+            amount: 1,
+            is_combat: false,
+            applied: HashSet::new(),
+        };
+        let mut events = Vec::new();
+        apply_damage_after_replacement(&mut state, &ctx, event, false, &mut events);
+
+        assert_eq!(
+            state.damage_dealt_this_turn[0].source_incarnation, source_incarnation,
+            "damage records must retain the pre-pause source incarnation"
         );
     }
 
@@ -4055,6 +4642,7 @@ mod tests {
                             count: QuantityExpr::Ref {
                                 qty: QuantityRef::EventContextAmount,
                             },
+                            position: crate::types::ability::LibraryPosition::Top,
                             face_down: false,
                         },
                     ))
@@ -4228,6 +4816,94 @@ mod tests {
 
         assert_eq!(state.objects[&bear1].damage_marked, 2);
         assert_eq!(state.objects[&bear2].damage_marked, 2);
+    }
+
+    /// #4960 follow-up (maintainer review on PR #5834, second pass): pins the
+    /// FINAL, corrected behavior after an intermediate version of this fix
+    /// was reverted for contradicting `FilterContext`'s own documented
+    /// invariant (`filter.rs`): `source_controller` is what `ControllerRef::
+    /// You` ("creatures you control") resolves against, and that pronoun
+    /// refers to the ABILITY's controller (who cast the spell) — not to
+    /// whoever happens to control the resolved damage source. Only
+    /// `filter_ctx.source_id` (the object identity, for `FilterProp::Another`
+    /// exclusion and similar) is overridden to the resolved damage source;
+    /// `source_controller` is deliberately left untouched.
+    ///
+    /// Two otherwise-identical creature recipients: one controlled by P0 (the
+    /// ability's controller — must match "you control"), one controlled by
+    /// P1 (the resolved damage source's controller, simulating a stolen
+    /// creature dealing the damage — must NOT match "you control", since
+    /// "you" is the caster, not the source).
+    #[test]
+    fn damage_all_controller_matches_recipient_reads_ability_controller() {
+        let mut state = GameState::new_two_player(42);
+        // Damage source: controlled by P1, even though the ability itself
+        // (below) has controller P0 — simulating a control change that
+        // happened between the source being targeted and this ability
+        // resolving.
+        let source = create_object(
+            &mut state,
+            CardId(30),
+            PlayerId(1),
+            "Stolen Creature".to_string(),
+            Zone::Battlefield,
+        );
+        let recipient_p0 = create_object(
+            &mut state,
+            CardId(31),
+            PlayerId(0),
+            "P0's Creature".to_string(),
+            Zone::Battlefield,
+        );
+        let recipient_p1 = create_object(
+            &mut state,
+            CardId(32),
+            PlayerId(1),
+            "P1's Other Creature".to_string(),
+            Zone::Battlefield,
+        );
+        for id in [source, recipient_p0, recipient_p1] {
+            let obj = state.objects.get_mut(&id).unwrap();
+            obj.card_types.core_types.push(CoreType::Creature);
+            obj.power = Some(4);
+            obj.base_power = Some(4);
+        }
+
+        let ability = ResolvedAbility::new(
+            Effect::DamageAll {
+                amount: QuantityExpr::Fixed { value: 3 },
+                target: TargetFilter::Typed(TypedFilter {
+                    type_filters: vec![crate::types::ability::TypeFilter::Creature],
+                    controller: None,
+                    properties: vec![
+                        FilterProp::Another,
+                        FilterProp::ControllerMatches {
+                            player: Box::new(crate::types::ability::PlayerFilter::Controller),
+                        },
+                    ],
+                }),
+                player_filter: None,
+                damage_source: Some(DamageSource::Target),
+            },
+            vec![TargetRef::Object(source)],
+            ObjectId(100),
+            PlayerId(0),
+        );
+        let mut events = Vec::new();
+
+        resolve_all(&mut state, &ability, &mut events).unwrap();
+
+        assert_eq!(
+            state.objects[&recipient_p0].damage_marked, 3,
+            "\"you control\" resolves against the ABILITY's controller (P0), \
+             per FilterContext's documented source_controller invariant"
+        );
+        assert_eq!(
+            state.objects[&recipient_p1].damage_marked, 0,
+            "the resolved damage source's controller (P1) must NOT be used \
+             for \"you control\" — only source_id (object identity) is \
+             overridden to the resolved damage source, not source_controller"
+        );
     }
 
     #[test]
@@ -5624,8 +6300,7 @@ mod tests {
             WaitingFor::ReplacementChoice { .. }
         ));
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("expected pending_continuation for remaining batch targets");
 
         // Every remaining creature must be encoded as its own chain node.
@@ -5738,8 +6413,7 @@ mod tests {
             WaitingFor::ReplacementChoice { .. }
         ));
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("expected pending_continuation for remaining batch targets");
         let summary = collect_chain_summary(&cont.chain);
         assert_eq!(
@@ -5780,8 +6454,7 @@ mod tests {
             WaitingFor::ReplacementChoice { .. }
         ));
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("expected pending_continuation for remaining-player damage");
 
         let summary = collect_chain_summary(&cont.chain);
@@ -5843,8 +6516,7 @@ mod tests {
             WaitingFor::ReplacementChoice { .. }
         ));
         let cont = state
-            .pending_continuation
-            .as_ref()
+            .active_ability_continuation()
             .expect("expected pending_continuation for remaining multi-target damage");
         let summary = collect_chain_summary(&cont.chain);
         assert_eq!(summary.len(), 1, "one remaining target; got {summary:?}");
@@ -5922,8 +6594,7 @@ mod tests {
 
         assert_eq!(
             state
-                .pending_continuation
-                .as_ref()
+                .active_ability_continuation()
                 .and_then(|c| c.parent_kind),
             Some(EffectKind::DamageAll),
             "the stashed continuation must carry EffectKind::DamageAll so the drain re-emits the parent event",
@@ -5955,7 +6626,7 @@ mod tests {
             result.events,
         );
         assert!(
-            state.pending_continuation.is_none(),
+            state.active_ability_continuation().is_none(),
             "continuation must be consumed after drain"
         );
     }
@@ -5999,8 +6670,7 @@ mod tests {
 
         assert_eq!(
             state
-                .pending_continuation
-                .as_ref()
+                .active_ability_continuation()
                 .and_then(|c| c.parent_kind),
             Some(EffectKind::DamageEachPlayer),
             "the stashed continuation must carry EffectKind::DamageEachPlayer",
@@ -6031,7 +6701,7 @@ mod tests {
             result.events,
         );
         assert!(
-            state.pending_continuation.is_none(),
+            state.active_ability_continuation().is_none(),
             "continuation must be consumed after drain"
         );
     }

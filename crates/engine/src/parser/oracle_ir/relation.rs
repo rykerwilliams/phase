@@ -22,21 +22,34 @@
 //! whole choice axis is one parameterized variant).
 
 use super::doc::OracleItemId;
-use crate::types::ability::ChosenSubtypeKind;
+use crate::types::ability::{ChosenSubtypeKind, TargetFilter};
 
 /// A cross-item relation between parsed document items, recovered at parse time
 /// and applied by id during lowering. Closed set.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub(crate) enum DocumentRelationIr {
-    /// CR 607.1 + CR 610.3: A two-trigger exile/return design (Journey to
-    /// Nowhere, Oblivion Ring). An ETB "exile target X" trigger (`etb_exile`)
-    /// pairs with an LTB "return the exiled card" trigger (`ltb_return`); because
-    /// the ETB exile has no printed duration, the exiled card would never return.
-    /// Applying the relation stamps `Duration::UntilHostLeavesPlay` on the ETB
-    /// exile so the existing `ExileLink::UntilSourceLeaves` mechanism returns it.
+    /// CR 607.1 + CR 607.2a + CR 406.6 + CR 610.3: A two-trigger exile/return
+    /// design. An ETB "exile ..." trigger (`etb_exile`) pairs with an LTB "return
+    /// the exiled card(s)" trigger (`ltb_return`); because the ETB exile has no
+    /// printed duration, the exiled card(s) would never return. Covers both the
+    /// single-target class (Journey to Nowhere, Oblivion Ring) and the mass-exile
+    /// class (Worldgorger Dragon's "exile all other permanents you control").
+    ///
+    /// `outcome` records how the pair is applied. An unmodified LTB return is
+    /// `DurationStamped`: applying it stamps `Duration::UntilHostLeavesPlay` on
+    /// the ETB exile so the existing `ExileLink::UntilSourceLeaves` mechanism
+    /// returns the cards. A return carrying an entry rider (Realm Razer's "return
+    /// the exiled cards to the battlefield TAPPED") is `ModifierUnsupported`: the
+    /// automatic return path performs a plain zone move and can't apply that
+    /// rider, so instead of silently dropping it the LTB return is marked
+    /// unsupported through `Effect::unimplemented` so coverage reports the gap
+    /// rather than the card showing as falsely supported. See
+    /// `trigger_is_ltb_return_shape` and `change_zone_return_has_no_entry_modifiers`
+    /// in `parser/oracle.rs`.
     EtbExileLtbReturn {
         etb_exile: OracleItemId,
         ltb_return: OracleItemId,
+        outcome: LinkedReturnOutcome,
     },
     /// CR 102.1 + CR 603.7c + CR 608.2c: A mass-`MustAttack` coerce clause over
     /// the active player (`coerce`, Siren's Call) pairs with a sibling delayed
@@ -48,10 +61,44 @@ pub(crate) enum DocumentRelationIr {
         coerce: OracleItemId,
         punisher: OracleItemId,
     },
+    /// CR 614.15: A separate ability-word-prefixed paragraph (`override_item`)
+    /// can create a self-replacement effect for the preceding ability paragraph
+    /// (`base`). This relation binds that printed form across document items,
+    /// preserving the base item's source span and printed ability slot when
+    /// lowering folds the override into it.
+    ///
+    /// This is the cross-document-item boundary. `ReplaceMeaningKind::Instead`
+    /// remains the within-one-effect-chain form, where a clause replaces a prior
+    /// clause during one `parse_effect_chain` call.
+    SelfReplacementOverride {
+        base: OracleItemId,
+        override_item: OracleItemId,
+    },
     /// CR 607.2d: A "choose a [value]" producer linked to an ability that reads
     /// "the chosen [value]" back. One parameterized relation; `LinkedChoiceKind`
     /// distinguishes the value kind and the consumer surface that reads it.
     LinkedChoice(LinkedChoiceKind),
+}
+
+/// CR 610.3: How a detected ETB-exile / LTB-return pair is applied during
+/// lowering. Parameterizes `EtbExileLtbReturn` rather than adding a sibling
+/// relation variant (see the module doc): both outcomes describe the same
+/// linked-ability pair, differing only in whether the generic return path can
+/// carry the printed return.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) enum LinkedReturnOutcome {
+    /// The LTB return is unmodified. Applying the relation stamps
+    /// `Duration::UntilHostLeavesPlay` on the ETB exile so the automatic
+    /// `ExileLink::UntilSourceLeaves` path returns the exiled card(s).
+    DurationStamped,
+    /// CR 610.3: The LTB return carries an entry modifier the automatic return
+    /// path cannot apply (Realm Razer's "return the exiled cards to the
+    /// battlefield tapped"). Applying the relation attaches an
+    /// `Effect::unimplemented` marker to the LTB return trigger so the
+    /// unsupported semantic is visible to coverage instead of silently dropped.
+    /// `fragment` is the verbatim LTB return text, captured at detection time
+    /// because the relation applier no longer has access to the item list.
+    ModifierUnsupported { fragment: String },
 }
 
 /// CR 607.2d: The kind of linked-choice relation — what value is chosen and
@@ -96,4 +143,21 @@ pub(crate) enum LinkedChoiceKind {
     /// exists, so a resolution-scoped choice with no durable reader stays
     /// non-persisted.
     PersistedPlayer { choosers: Vec<OracleItemId> },
+    /// CR 607.2d + CR 707.2c + CR 614.12a: An as-enters permanent-object choice
+    /// gap (`chooser` — an Unimplemented ability whose Oracle text is
+    /// "As … enters, choose <permanent>") linked to a
+    /// `ContinuousModification::CopyChosen` static (`copy_static`). Discovery
+    /// captures the chooser's typed filter and original description before
+    /// lowering; finalization replaces that same source item in place with a
+    /// relation-synthesis payload that injects `Effect::ChoosePermanent` —
+    /// Metamorphic Alteration's Aura-host copy. Without this consumer relation
+    /// the choose line stays an ordinary Unimplemented ability (no Moved claim),
+    /// so non-CopyChosen cards (Dauntless Bodyguard, Scheming Fence) keep their
+    /// pre-existing unsupported shape.
+    CopyChosenHost {
+        chooser: OracleItemId,
+        copy_static: OracleItemId,
+        filter: TargetFilter,
+        description: String,
+    },
 }

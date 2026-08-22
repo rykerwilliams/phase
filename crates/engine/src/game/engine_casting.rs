@@ -19,9 +19,14 @@ pub(super) fn cancel_pending_cast(
     player: PlayerId,
     pending_cast: &PendingCast,
     events: &mut Vec<GameEvent>,
-) -> WaitingFor {
+) -> Result<WaitingFor, EngineError> {
+    if pending_cast.activation_cost_committed {
+        return Err(EngineError::ActionNotAllowed(
+            "Cannot cancel an activation after a cost is paid".to_string(),
+        ));
+    }
     casting::handle_cancel_cast(state, pending_cast, events);
-    WaitingFor::Priority { player }
+    Ok(WaitingFor::Priority { player })
 }
 
 pub(super) fn handle_target_selection_select_targets(
@@ -83,6 +88,26 @@ pub(super) fn handle_discard_for_cost(
     events: &mut Vec<GameEvent>,
 ) -> Result<WaitingFor, EngineError> {
     casting::handle_discard_for_cost(
+        state,
+        player,
+        pending_cast,
+        count,
+        legal_cards,
+        chosen,
+        events,
+    )
+}
+
+pub(super) fn handle_reveal_for_cost(
+    state: &mut GameState,
+    player: PlayerId,
+    pending_cast: PendingCast,
+    count: usize,
+    legal_cards: &[ObjectId],
+    chosen: &[ObjectId],
+    events: &mut Vec<GameEvent>,
+) -> Result<WaitingFor, EngineError> {
+    casting::handle_reveal_for_cost(
         state,
         player,
         pending_cast,
@@ -415,10 +440,11 @@ pub(super) fn handle_harmonize_tap_choice(
         player,
         pending.object_id,
         pending.card_id,
-        pending.ability,
+        *pending.ability,
         &pending.cost,
         base_cost,
         pending.casting_variant,
+        pending.casting_permission_index,
         pending.cast_timing_permission,
         pending.distribute,
         pending.origin_zone,

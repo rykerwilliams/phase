@@ -33,16 +33,6 @@
 </p>
 <!-- coverage-badges:end -->
 
-<p align="center">
-  <a href="https://gittensor.io/miners/repository?name=phase-rs%2Fphase">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/phase-rs/phase/gittensor-impact-assets/gittensor-impact-dark.svg">
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/phase-rs/phase/gittensor-impact-assets/gittensor-impact-light.svg">
-      <img src="https://raw.githubusercontent.com/phase-rs/phase/gittensor-impact-assets/gittensor-impact-light.svg" alt="Gittensor contributor impact for phase.rs" width="600">
-    </picture>
-  </a>
-</p>
-
 ---
 
 <p align="center">
@@ -84,6 +74,8 @@ Read https://raw.githubusercontent.com/phase-rs/phase/main/docs/AI-CONTRIBUTOR.m
 and follow it end-to-end to implement {a card I name, or pick one for me}.
 Use the $engine-implementer skill. Use high thinking. Don't stop for my input.
 Open a PR when done.
+Use the repository's .github/PULL_REQUEST_TEMPLATE.md for the PR body and fill
+every section.
 ```
 
 Full procedure, two tracks (developer / non-developer), and copy-paste prompts for LLM UIs without web fetch: [docs/AI-CONTRIBUTOR.md](docs/AI-CONTRIBUTOR.md).
@@ -143,7 +135,6 @@ The easiest way to run a dedicated multiplayer server is the Docker image:
 ```bash
 docker volume create phase-server-data
 docker run -d \
-  --platform linux/amd64 \
   --name phase-server \
   --restart unless-stopped \
   -p 9374:9374 \
@@ -153,7 +144,8 @@ docker run -d \
   ghcr.io/phase-rs/phase-server:latest
 ```
 
-The image includes the server binary and generated card data. It exposes:
+The image (linux/amd64 and linux/arm64) includes the server binary; card data is
+downloaded into the data volume on first boot. It exposes:
 
 - `http://localhost:9374/health` for health checks
 - `ws://localhost:9374/ws` for WebSocket clients
@@ -178,7 +170,7 @@ Docker uses environment variables for the common options:
 You can also pass server flags after the image name:
 
 ```bash
-docker run --rm --platform linux/amd64 -p 9374:9374 ghcr.io/phase-rs/phase-server:latest --lobby-only --cors-origin '*'
+docker run --rm -p 9374:9374 ghcr.io/phase-rs/phase-server:latest --lobby-only --cors-origin '*'
 ```
 
 For public internet play, put the container behind a TLS reverse proxy and give
@@ -187,7 +179,6 @@ same host, bind Docker to localhost instead:
 
 ```bash
 docker run -d \
-  --platform linux/amd64 \
   --name phase-server \
   --restart unless-stopped \
   -p 127.0.0.1:9374:9374 \
@@ -198,6 +189,17 @@ docker run -d \
 ```
 
 The same flags work when running the `phase-server` release binary directly.
+
+To build the image yourself (cross-compiles on the build host, no emulated
+cargo):
+
+```bash
+docker buildx create --use   # once: multi-platform builds need a docker-container builder
+docker buildx build --platform linux/amd64,linux/arm64 --build-arg PHASE_CHANNEL=release \
+  -t <registry>/phase-server:latest --push .
+```
+
+For Kubernetes, see the Helm chart in [`deploy/helm/phase-server`](deploy/helm/phase-server).
 
 ## Architecture
 

@@ -60,6 +60,67 @@ describe("TargetingOverlay", () => {
     expect(screen.getByText("a player")).toBeInTheDocument();
   });
 
+  it("uses the native keep-tapped skip action for an untap decision", () => {
+    const dispatch = vi.fn().mockResolvedValue([]);
+    const permanent = buildGameObject({ id: 10, zone: "Battlefield", tapped: true });
+    const gameState = createGameState({
+      objects: buildObjectMap(permanent),
+      battlefield: [10],
+      waiting_for: { type: "UntapChoice", data: { player: 0, candidates: [10] } },
+    });
+    act(() => {
+      useGameStore.setState({ gameState, waitingFor: gameState.waiting_for, dispatch });
+    });
+
+    render(<TargetingOverlay />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep tapped" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ChooseUntap",
+      data: { object_id: 10, untap: false },
+    });
+  });
+
+  it("labels an 'of an opponent's choice' slot for the announcing viewer", () => {
+    const dispatch = vi.fn().mockResolvedValue([]);
+    // CR 601.2c: the engine routes the prompt to the slot's announcer, who is the
+    // local viewer of this overlay — so `chooser` equals the local player. The
+    // hint must still render (the prior `chooser !== localPlayerId` guard hid it).
+    const gameState = createGameState({
+      waiting_for: {
+        type: "TargetSelection",
+        data: {
+          player: 0,
+          pending_cast: {
+            object_id: 5,
+            card_id: 10,
+            ability: { targets: [] },
+            cost: { type: "NoCost" },
+          },
+          target_slots: [
+            { legal_targets: [{ Player: 1 }], optional: false, chooser: 0 },
+          ],
+          selection: {
+            current_slot: 0,
+            current_legal_targets: [{ Player: 1 }],
+          },
+        },
+      },
+    });
+
+    act(() => {
+      useGameStore.setState({
+        gameState,
+        waitingFor: gameState.waiting_for,
+        dispatch,
+      });
+    });
+
+    render(<TargetingOverlay />);
+
+    expect(screen.getByText("(opponent's choice)")).toBeInTheDocument();
+  });
+
   it("dispatches null target when the active engine slot is optional and skipped", () => {
     const dispatch = vi.fn().mockResolvedValue([]);
     const gameState = createGameState({

@@ -5,6 +5,16 @@
     "close": "Chiudi",
     "closeNamed": "Chiudi {{name}}"
   },
+  "quantityRef": {
+    "highestNumber": "il numero più alto",
+    "lowestNumber": "il numero più basso",
+    "chosenNumber": "il numero scelto"
+  },
+  "scryOutcome": {
+    "title": "Scry completato",
+    "you": "Tu",
+    "result": "{{player}} — {{top}} in cima · {{bottom}} in fondo"
+  },
   "modal": {
     "defaultEyebrow": "Strumento dello spazio di lavoro"
   },
@@ -15,6 +25,24 @@
     "enter": "Attiva schermo intero",
     "exit": "Esci da schermo intero"
   },
+  "nativeEngineProgress": {
+    "title": "Aggiornamento del motore nativo",
+    "resolving": "Ricerca del server locale corretto…",
+    "downloadingBinary": "Download del server aggiornato…",
+    "verifying": "Verifica del server…",
+    "downloadingData": "Download dei dati di gioco…",
+    "spawning": "Avvio del server locale…",
+    "ready": "Motore nativo pronto",
+    "failed": "Impossibile preparare il motore nativo"
+  },
+  "engineBadge": {
+    "native": "Motore nativo",
+    "nativeTooltip": "Questa partita usa il motore nativo dell'app desktop.",
+    "inBrowser": "Motore del browser",
+    "inBrowserTooltip": "Motore nativo non disponibile: questa partita è in esecuzione nel browser.",
+    "versionMismatchTooltip": "Versione del motore nativo non corrispondente: questa partita è in esecuzione nel browser.",
+    "notAttemptedTooltip": "Questa partita è in esecuzione nel browser: il motore nativo non è stato usato."
+  },
   "buildBadge": {
     "downloading": "download in corso… {{progress}}%",
     "checking": "controllo…",
@@ -22,6 +50,7 @@
     "updatePending": "aggiornamento in attesa al termine della partita",
     "cards": "carte {{age}} ({{commit}})",
     "cardDataTitle": "Dati carte generati il {{date}} da {{commit}}",
+    "desktopAppVersion": "App desktop v{{version}}",
     "checkForUpdates": "Controlla aggiornamenti",
     "updaterDebugInfo": "Info di debug dell'aggiornatore",
     "updaterIssue": "Problema dell'aggiornatore: {{error}}",
@@ -29,7 +58,7 @@
     "updated": "aggiornato"
   },
   "comboDetector": {
-    "label": "Rilevatore di combo",
+    "label": "Rilevatore di combo (sperimentale)",
     "title": "Rileva i loop infiniti: termina automaticamente i loop obbligatori e mostra le risorse ∞ (disattivato per impostazione predefinita)",
     "on": "Attivo",
     "off": "Disattivato",
@@ -59,6 +88,7 @@
     "showAiHand": "Mostra mano IA",
     "hideAiHand": "Nascondi mano IA",
     "requestTakeback": "Richiedi ripristino",
+    "undoLastAction": "Annulla ultima azione",
     "concede": "Concedi",
     "backToDraft": "Torna al Draft",
     "mainMenu": "Menu principale",
@@ -66,6 +96,7 @@
     "cardDataTitle": "Dati carte: {{date}}"
   },
   "volume": {
+    "deviceBlocked": "Audio non disponibile — il server audio di sistema non risponde. Riavvia l'app per riprovare.",
     "mute": "Disattiva audio",
     "unmute": "Riattiva audio",
     "volume": "Volume"
@@ -246,7 +277,13 @@
     "youPlayFirst": "Giochi per primo",
     "playerPlaysFirst": "{{name}} gioca per primo",
     "heads": "Testa",
-    "tails": "Croce"
+    "tails": "Croce",
+    "coinFlip": "Lancio della moneta",
+    "wonCoinFlip": "{{name}} ha vinto il lancio",
+    "lostCoinFlip": "{{name}} ha perso il lancio",
+    "turnOrder": "Ordine dei turni",
+    "turnOrderItem": "Turno {{turn}}: {{name}}",
+    "youTakeTurn": "Giochi il turno {{turn}}"
   },
   "chrome": {
     "back": "Indietro",

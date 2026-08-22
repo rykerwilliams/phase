@@ -15,14 +15,16 @@ describe("preferencesStore", () => {
         boardBackground: "auto-wubrg",
         vfxQuality: "full",
         animationSpeedMultiplier: 1.0,
+        showCardPreviewFooter: true,
         pacingMultipliers: { effects: 1.0, combat: 1.0, banners: 1.0 },
+        priorityPassingMode: "Standard",
         masterVolume: 100,
         sfxVolume: 70,
         musicVolume: 40,
         sfxMuted: false,
         musicMuted: false,
         masterMuted: false,
-        multiplayerBoardLayout: "focused",
+        multiplayerBoardLayout: "split",
         aiSeats: [{ difficulty: "Medium", deckId: "Random" }],
         aiBracketFilter: [],
       });
@@ -38,8 +40,12 @@ describe("preferencesStore", () => {
     expect(state.followActiveOpponent).toBe(false);
     expect(state.logDefaultState).toBe("closed");
     expect(state.boardBackground).toBe("auto-wubrg");
-    expect(state.multiplayerBoardLayout).toBe("focused");
+    // Read the store's real initialization snapshot (the getInitialState idiom
+    // used below): the shared beforeEach writes its own defaults snapshot, so a
+    // getState() read here would assert that snapshot, not buildDefaultPreferences().
+    expect(usePreferencesStore.getInitialState().multiplayerBoardLayout).toBe("split");
     expect(state.aiSeats).toEqual([{ difficulty: "Medium", deckId: "Random" }]);
+    expect(state.priorityPassingMode).toBe("Standard");
   });
 
   it("setAiSeatDifficulty updates the target seat", () => {
@@ -93,11 +99,13 @@ describe("preferencesStore", () => {
   });
 
   it("setMultiplayerBoardLayout updates multiplayer board layout", () => {
+    // Set the NON-default value: "split" is the default, so asserting it here
+    // would pass with the setter deleted.
     act(() => {
-      usePreferencesStore.getState().setMultiplayerBoardLayout("split");
+      usePreferencesStore.getState().setMultiplayerBoardLayout("focused");
     });
 
-    expect(usePreferencesStore.getState().multiplayerBoardLayout).toBe("split");
+    expect(usePreferencesStore.getState().multiplayerBoardLayout).toBe("focused");
   });
 
   it("setFollowActiveOpponent updates the value", () => {
@@ -146,6 +154,20 @@ describe("preferencesStore", () => {
     });
 
     expect(usePreferencesStore.getState().vfxQuality).toBe("minimal");
+  });
+
+  it("shows the card preview footer by default and persists changes", () => {
+    // Read the store's actual initialization snapshot so the shared beforeEach
+    // reset cannot mask a regression in buildDefaultPreferences().
+    expect(usePreferencesStore.getInitialState().showCardPreviewFooter).toBe(true);
+
+    act(() => {
+      usePreferencesStore.getState().setShowCardPreviewFooter(false);
+    });
+
+    expect(usePreferencesStore.getState().showCardPreviewFooter).toBe(false);
+    const stored = JSON.parse(localStorage.getItem("phase-preferences")!);
+    expect(stored.state.showCardPreviewFooter).toBe(false);
   });
 
   it("setAnimationSpeedMultiplier updates the value", () => {
@@ -213,6 +235,7 @@ describe("preferencesStore", () => {
       usePreferencesStore.getState().setCardSize("large");
       usePreferencesStore.getState().setMasterVolume(20);
       usePreferencesStore.getState().setPacingMultiplier("combat", 1.5);
+      usePreferencesStore.getState().setPriorityPassingMode("SkipLowUseWindows");
     });
 
     act(() => {
@@ -223,6 +246,7 @@ describe("preferencesStore", () => {
     expect(state.cardSize).toBe("medium");
     expect(state.masterVolume).toBe(100);
     expect(state.pacingMultipliers).toEqual({ effects: 1.0, combat: 1.0, banners: 1.0 });
+    expect(state.priorityPassingMode).toBe("Standard");
   });
 
   it("existing preferences are unchanged after setting animation prefs", () => {
@@ -377,6 +401,24 @@ describe("preferencesStore", () => {
     });
 
     expect(usePreferencesStore.getState().phaseStops).toEqual([]);
+  });
+
+  it.each([24, 25])("migrates the legacy Smart value from v%i", (version) => {
+    localStorage.setItem(
+      "phase-preferences",
+      JSON.stringify({ state: { priorityPassingMode: "Smart" }, version }),
+    );
+    act(() => usePreferencesStore.persist.rehydrate());
+    expect(usePreferencesStore.getState().priorityPassingMode).toBe("SkipLowUseWindows");
+  });
+
+  it("safely normalizes invalid v25 priority-passing modes", () => {
+    localStorage.setItem(
+      "phase-preferences",
+      JSON.stringify({ state: { priorityPassingMode: "Aggressive" }, version: 25 }),
+    );
+    act(() => usePreferencesStore.persist.rehydrate());
+    expect(usePreferencesStore.getState().priorityPassingMode).toBe("Standard");
   });
 
   // --- Audio preferences ---
@@ -553,7 +595,7 @@ describe("preferencesStore", () => {
     expect(usePreferencesStore.getState().aiBracketFilter).toEqual([]);
   });
 
-  it("v20 → v21 migration defaults multiplayerBoardLayout to focused", () => {
+  it("v20 → v21 migration keeps pre-existing stores on the focused layout", () => {
     localStorage.setItem(
       "phase-preferences",
       JSON.stringify({

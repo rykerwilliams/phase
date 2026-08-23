@@ -513,3 +513,123 @@ separate from their point value (Melee.gg's lever), and (b) a
 non-MTR bye convention (TopDeck.gg's lever) — not whether the win/draw/loss
 point fields themselves are the right idea, which this research confirms
 they are.
+
+## 13. Commander/multiplayer pod tournaments — the Multiplayer Addendum to the MTR ("MSTR"), and production practice
+
+Per direct instruction: the design must cover Commander/multiplayer pod
+tournaments, not head-to-head only (CONTEXT.md finding #9). Magic's own
+tournament-rules body publishes a dedicated addendum for exactly this case
+— checked directly this session (WebSearch + WebFetch), not assumed from
+1v1 MTR text scaled up.
+
+**Source and cross-verification.** Fetched the Multiplayer Addendum to the
+Magic Tournament Rules via [juizes-mtg-portugal.github.io/multiplayer-addendum-mtr](https://juizes-mtg-portugal.github.io/multiplayer-addendum-mtr)
+(a judge-community mirror of the official text). Cross-referenced its
+existence and content against two independent sources found in the same
+search pass — [benelux-cedh-rules.eu/multiplayer-addendum-mtr](https://benelux-cedh-rules.eu/multiplayer-addendum-mtr)
+(another regional judge-community mirror) and [topdeck.gg/mtr-ipg-addendum](https://topdeck.gg/mtr-ipg-addendum)
+(a production tournament platform's own reference copy) — not a single
+unverified source. All three exist and describe the same ruleset; only the
+first was WebFetched in full for exact figures.
+
+**Match-point scoring — a general formula, not a separate convention.**
+Per-win points are `2n - 1` for a pod of `n` players: 7 match points for a
+win in the standard 4-player pod. A draw awards 1 match point to *every*
+seated player, including ones with fewer game wins in the shared match. A
+loss is 0. **This formula is not a new convention alongside MTR §2.1's 3/1/0
+— it's the general case MTR §2.1 already cited in #5312 is a special case
+of**: at `n = 2`, `2n - 1 = 3`, matching MTR exactly. This is why PLAN.md
+§1 designs `ScoringPolicy::default_for_arity` as one formula rather than a
+`match arity { 2 => .., 4 => .. }` branch.
+
+**Bye scoring** mirrors the win-point formula exactly: "A Player who
+receives a Bye in a Multiplayer Tournament receives 2n - 1 Match points" —
+7 for a 4-player event, same value as an actual win, same shape as MTR
+Appendix C's bye-scores-as-a-win convention #5312 already cites for 1v1.
+
+**Tiebreaker order — genuinely different axes, confirmed by direct
+citation, not just re-scaled MTR:**
+1. Match points (cumulative, same axis as MTR).
+2. Match-win percentage: `(Match points − Byes × Points-per-win) / (Matches
+   played × Points-per-win)` — the *floor* for this and the derived
+   percentages below uses `1 / Points-per-win` (≈0.14 at 7 points/win)
+   generalizing MTR's own 0.33 floor (`1/3` at 3 points/win) — same formula,
+   different plug-in value, confirmed by the source's own worked framing.
+3. Opponents' average match points (raw point sum ÷ opponent count) — **an
+   axis with no 1v1 analog.** MTR's 1v1 tiebreak order has no "opponents'
+   raw average points" step at all; it goes straight from opponents'
+   match-win % to game-win %.
+4. Opponents' match-win percentage (average of opponents' own MWP).
+
+Notably absent versus MTR's 1v1 order: **no game-win percentage axis at
+all.** MTR step 3 (1v1) is "game-win percentage, floored at 0.33" — MSTR
+has nothing analogous, because a multiplayer pod match is a single game
+with one shared result, not a Bo3 with a per-player game-win count to
+average. This confirms `PodOutcome` (PLAN.md §2) is right to drop
+`game_wins` entirely for `arity > 2` rather than trying to force a
+best-of-N shape onto a pod result.
+
+**Pairing algorithm — top-to-bottom assignment with swap-based repair,
+independently confirming CONTEXT.md finding #8's recommendation, not
+contradicting it.** Direct quote (paraphrased minimally): pairings are
+formed by sorting players by current performance (match points, then
+tiebreaks), then assigning top-to-bottom into pods, avoiding any pairing
+between players who've already played each other in a prior round. When
+the top-to-bottom pass leaves players who can't be seated without a
+rematch, the algorithm **iteratively swaps** an unseated player with one
+already placed in a pod further down the standings — a player moved into a
+higher pod than their standing is "paired up," moved into a lower one is
+"paired down." **There is no recursive backtracking search anywhere in this
+description** — it's a greedy top-down pass plus a swap-based repair step,
+the same algorithmic *shape* `draft-core`'s existing 1v1 Swiss pairing
+already uses (§11 above: greedy-within-bracket + carry-one-down, no
+backtracking). Finding #8 recommended that shape for 1v1 pairing as a way
+to sidestep #4615's backtracking bug; this section confirms the official
+body governing *multiplayer* pairing independently arrived at the same
+non-backtracking shape for pods. One generalized algorithm (top-to-bottom +
+swap, parameterized by `arity`) now covers both cases described in PLAN.md
+§2, rather than needing a 1v1-specific fix and a separate pod-specific
+design.
+
+**Uneven player counts — a short pod, not more byes.** Direct quote:
+"Priority should be given to forming as many pods with 4 players as
+possible each round. In cases where this isn't possible, pods may consist
+of a minimum of 3 players to avoid multiple byes," and "it is desirable
+that Players only get matched in smaller size pods at most once per event"
+— i.e., fairness tracking for who's been shorted, mirroring (but distinct
+from) bye fairness. This has no 1v1 analog: a head-to-head bracket either
+pairs a player or gives them a bye, there's no intermediate "smaller match"
+option. PLAN.md §2 models this as `TournamentPlayer.had_short_pod`, a new
+field alongside (not replacing) `had_bye`.
+
+**Round-count / cut table — a separate lookup from MTR Appendix E, not the
+same table reused.** MSTR's own table (4-player pods): 4-5 players → single
+elimination only, no Swiss; 6-16 → 2 Swiss rounds, Top 4 cut; 17-24 → 3
+rounds, Top 7; 25-32 → 4 rounds, Top 10; 33-40 → 5 rounds, Top 13; 41-64 →
+5 rounds, Top 16. Also states a Competitive-REL minimum of 2 rounds for
+multiplayer events. This confirms `total_rounds`'s "default lookup" (PLAN.md
+§1) must itself be keyed on `(arity, player_count)`, not just
+`player_count` — MTR Appendix E and this table are genuinely different
+inputs to the same kind of lookup, not one table with an extra column.
+
+**Cross-checked against a platform actually running Commander events
+today, not rules text alone.** [topdeck.gg/help/running-commander-tournament](https://topdeck.gg/help/running-commander-tournament)
+(via search-result summary — direct WebFetch of this specific page wasn't
+attempted this session, the citation is search-summary-level, weaker than
+the WebFetch-verified pages elsewhere in this document and flagged as such)
+confirms real production behavior matching MSTR's stated preference: "Pods
+seat four by default. Odd fields produce a short pod or a bye, and the byes
+card shows who sat out." The same search pass also surfaced TopDeck.gg's
+Swiss-pods/Power-pods/Random-pods/Bubble-pods pairing-mode menu for
+multiplayer formats generally — noted for awareness only, not incorporated
+into this phase's design, since v1's scope (per CONTEXT.md open question #2
+and #5312's own framing) is standard Swiss pairing, not organizer-selectable
+pairing *styles*.
+
+**What this section does NOT establish:** exact MSTR section/paragraph
+numbers for pinpoint citation the way `MTR §2.1`/`MTR Appendix C` are cited
+elsewhere in this document — the fetched mirror presents the addendum as
+continuous prose/tables rather than numbered rule text the way the main MTR
+is. Code comments citing this ruleset should reference it as "the
+Multiplayer Addendum to the MTR (MSTR)" by name rather than inventing a
+section number that wasn't confirmed present in the source.

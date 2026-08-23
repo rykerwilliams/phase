@@ -25,9 +25,25 @@ channel") is imprecise about which crate that channel actually lives in, but
 the underlying mechanism it's pointing at is real and the proposed reuse is
 still correct. Full citations are in RESEARCH.md; this file is the synthesis.
 
-**Re-verification pass (this update): still holds, plus one real update and
-one real find.** `main` has moved substantially since the original research
-(commit `d65111246`) — re-checked every "confirmed fact" below directly
+**Scope expansion (this update, per direct instruction): this design must
+cover both head-to-head (Standard/Modern/etc.) and Commander/multiplayer pod
+tournaments, not head-to-head only.** Every design section up to this point
+implicitly assumed 2 players per pairing — the Swiss algorithm pairs, the
+`ScoringPolicy`/tiebreak math assumes a winner-vs-loser binary, and the
+single-elimination path is an adjacent-pair bracket. None of that is wrong
+for what it covers; it just doesn't cover Commander pods (typically 4
+players per match, one winner, MTR's own dedicated Multiplayer Addendum
+governing scoring/tiebreaks/pairing differently from 1v1). This pass adds
+finding #9 below (the Multiplayer Addendum to the MTR, "MSTR" — full detail
+in RESEARCH.md §13) and generalizes PLAN.md's pairing/scoring/tiebreak
+design over a new `MatchArity` parameter so `arity = 2` is the existing
+design, not a fork of a new one — see PLAN.md §1-§2 for the resulting
+shape.
+
+**Re-verification pass (an earlier update): still holds, plus one real
+update and one real find.** `main` has moved substantially since the
+original research (commit `d65111246`) — re-checked every "confirmed fact"
+below directly
 against current `main` rather than trusting the earlier pass. Everything
 held except `PROTOCOL_VERSION`'s specific value, which changed for a good
 architectural reason (finding #4, updated below) — and one thing the
@@ -230,6 +246,54 @@ file:line evidence.
      the same shape is an implementation-time call PR 1 should make
      explicitly, not leave implicit.
 
+9. **NEW — Commander/multiplayer pod tournaments are governed by a separate,
+   official ruleset (the Multiplayer Addendum to the MTR, referred to here
+   as "MSTR") with different scoring, tiebreak, and pairing conventions than
+   1v1 — not just a bigger pod on the same math.** Fetched directly this
+   session (juizes-mtg-portugal.github.io's mirror, cross-referenced against
+   BeNeLux cEDH's mirror and TopDeck.gg's own addendum page — full citations
+   in RESEARCH.md §13), not paraphrased from memory:
+   - **Scoring generalizes cleanly, not by coincidence**: MSTR's win-point
+     formula is `2n - 1` for pod size `n` — 7 points for a 4-player pod's
+     win. At `n = 2` this is exactly `3`, the MTR §2.1 value #5312 already
+     cites. This means `ScoringPolicy`'s existing 3/1/0 default is a special
+     case of one general formula, not a separate convention — see PLAN.md
+     §1's `default_for_arity`.
+   - **Tiebreak order is genuinely different, not just re-scaled.** MSTR
+     drops the "opponents' game-win %" axis entirely (pods are single-game;
+     there's no per-player game-win count to average) and adds an
+     "opponents' average match points" axis 1v1 doesn't have. The floor
+     value both rulesets use (0.33 for 1v1, ≈0.14 for 4-player pods) is the
+     *same* formula, `1 / win_points`, evaluated at each ruleset's own
+     `win_points` — another clean unification, unlike the tiebreak order
+     itself.
+   - **Pairing is officially non-backtracking, independently confirming
+     finding #8's recommendation.** MSTR's own algorithm is top-to-bottom
+     assignment by current standing, with an iterative *swap* repair step
+     for players who can't be placed without a rematch — no recursive
+     search, no base case to get wrong. This is the same algorithmic
+     *shape* `draft-core`'s existing 1v1 pairing already uses (greedy +
+     carry-down repair, finding #8), just generalized to N-player pods
+     instead of pairs. One algorithm now needs designing, not two — see
+     PLAN.md §2.
+   - **Uneven player counts get a short pod, not more byes.** MSTR:
+     "pods may consist of a minimum of 3 players to avoid multiple byes"
+     for a nominal 4-player event, with fairness tracking so the same
+     player isn't shorted twice before everyone else has been shorted once.
+     This has no analog in 1v1 (a bye is the only "can't fill the pairing"
+     case there) and is a genuinely new piece of state (`had_short_pod`,
+     PLAN.md §2), not a renamed existing field.
+   - **Cross-checked against production practice, not just the rules
+     text**: TopDeck.gg's own "Running Commander Tournaments" help page
+     confirms this isn't academic — "Pods seat four by default. Odd fields
+     produce a short pod or a bye" — matching MSTR's stated preference, in
+     a platform actually running Commander events today.
+   - **Scope note**: MSTR's own round-count table (4-5 players → single
+     elimination only, 6-16 → 2 Swiss rounds + Top 4, etc.) is a *different*
+     table from the MTR Appendix E table #5312 already cites for 1v1 — both
+     are default lookups keyed off `(arity, player_count)`, not a single
+     shared table, per PLAN.md §1's `total_rounds` framing.
+
 ## What this session did NOT re-verify (explicitly out of scope per the task)
 
 The Magic Tournament Rules citations in #5314 (match points 3/1/0 at MTR
@@ -291,6 +355,15 @@ verification pass — nothing found this session resolves them unilaterally:
    pairing), with full-mode integration as an explicit fast-follow. Confirmed
    this matches #4612's original framing exactly, and nothing found this
    session suggests otherwise. Recommend confirming as stated.
+4. **NEW — does v1 need Commander single-elimination bracket play, or only
+   Commander Swiss?** MSTR's own round-count table only calls for Swiss +
+   Top-4/7/10/13/16 single-elimination cuts once the Swiss rounds finish
+   (finding #9) — it doesn't describe a *pure* SE bracket built from 4-player
+   pods the way 1v1's existing adjacent-pair SE path works. This session's
+   recommendation (PLAN.md §2): treat pod-based SE as a natural but
+   unimplemented-in-v1-detail extension of the existing arity-gated SE path,
+   not block Commander Swiss support on designing it fully now — but this is
+   a product-scope call for the maintainer, not decided unilaterally here.
 
 ## Relationship to adjacent work — scope boundaries
 

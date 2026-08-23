@@ -255,6 +255,34 @@ verification pass — nothing found this session resolves them unilaterally:
    vs. Comprehensive Rules game mechanics). Phase 58's own CONTEXT.md
    independently reached the same conclusion from the other side (see
    "Relationship to adjacent work" below) — this is not a contested call.
+
+   **NEW this pass — checked what real MTG tournament platforms (TopDeck.gg,
+   Melee.gg) actually expose as configuration, per direct request, since
+   citing the MTR alone doesn't show what organizers actually ask for beyond
+   the official rules.** Full detail in RESEARCH.md §12. Summary: both
+   platforms confirm win/draw points ARE a real, requested configuration
+   surface (not a hypothetical) — TopDeck.gg exposes explicit "points per
+   win"/"points per draw" fields with organizer-set custom values (published
+   before round 1 so players know the stakes), and Melee.gg exposes a
+   simpler binary "Enable Draws" toggle (some organizers just disallow draws
+   outright, a different axis than customizing their point value). **This
+   surfaces one thing a flat `ScoringPolicy{win,draw,loss}` doesn't capture
+   that maybe should be a fourth field: TopDeck.gg's bye handling diverges
+   from the MTR text #5314 already cites.** MTR (Appendix C, already quoted
+   in the discussion) says a bye scores as a win AND is *excluded* from
+   opponents'-percentage averaging (no real opponent that round). TopDeck.gg
+   instead credits a bye as a win but *adds* synthetic opponent history (3
+   opponents at a fixed 0.2 win rate) so the bye round still contributes to
+   tiebreaker averaging rather than being skipped. These are two genuinely
+   different, real, in-production conventions for the exact same MTR rule —
+   worth flagging to the maintainer as a possible fifth `ScoringPolicy`
+   axis (a `ByeTiebreakerHandling` enum: `ExcludeFromAverages` (MTR) vs.
+   `SyntheticOpponent` (TopDeck.gg-style)) rather than hardcoding MTR's
+   choice as the only option, mirroring how the win/draw/loss points
+   themselves are already planned as TO-configurable rather than fixed
+   constants. Not resolved here — a genuine open question for the
+   maintainer, same as the original three below, not something this pass
+   decides unilaterally.
 2. **Round advancement**: organizer-gated only for v1, or build an
    auto-advance timer now? No new evidence found either way this session;
    still a product-scope call, not an architecture one — a timer is additive

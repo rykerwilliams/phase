@@ -448,3 +448,68 @@ need real adaptation across a crate boundary with different lifecycles —
 whether that's done as literal shared code or two independently-tested
 implementations of the same shape is a PR 1 implementation decision, not
 resolved here.
+
+## 12. Real-world tournament platforms — what TopDeck.gg / Melee.gg actually expose as configuration
+
+Per direct request: MTR gives the *default* rules, but doesn't show what
+organizers actually ask real tournament software for beyond the official
+text. Checked two production MTG tournament platforms directly (WebSearch +
+WebFetch this session, not from memory).
+
+**TopDeck.gg:**
+- Confirms win/draw/loss points are a real, exposed, organizer-set
+  configuration surface, not a hypothetical this phase is inventing: "You
+  can change scoring values and tiebreakers in Configuration, and every
+  standing re-grades automatically against the new settings" — and
+  organizers are expected to "decide on scoring values before round one and
+  publish them on the event page so players know what a win is worth."
+  TopDeck's own multiplayer-Commander default is 5/1/0 (win/draw/loss),
+  confirmed distinct from MTR's 1v1 default of 3/1/0 already cited in
+  #5314 — i.e., the *fact* that different formats/organizers want different
+  win-point values, not just different draw-point values, is already live
+  in a shipping product, not speculative.
+- **Bye handling diverges from MTR's own text.** MTR Appendix C (already
+  quoted in #5314): a bye scores as a 2-0 win and is *excluded* from
+  opponents'-percentage tiebreaker averaging (no real opponent that round).
+  TopDeck.gg instead: "Any player receiving a bye will have 3 opponents
+  added to their opponent history with a .2 win rate percentage" — a
+  *synthetic* opponent-history entry that still contributes to tiebreaker
+  averaging, rather than being excluded. Two different, real,
+  currently-in-production conventions for the identical MTR rule.
+- Source: [topdeck.gg/help/creating-tournaments](https://topdeck.gg/help/creating-tournaments)
+  (via search summary; direct WebFetch blocked this session — "unable to
+  verify domain safety," a tool-side restriction, not a content gap),
+  [topdeck.gg/help/circuit-leaderboards-management](https://topdeck.gg/help/circuit-leaderboards-management)
+  (WebFetch succeeded directly), search results for TopDeck.gg tournament
+  configuration and bye/tiebreaker handling.
+
+**Melee.gg:**
+- Exposes a simpler, binary lever instead of point-value customization:
+  "Enable Draws" — a checkbox to permit or disallow drawn matches entirely,
+  confirmed via direct WebFetch of the tournament-setup help page. This is
+  a genuinely different axis from "what is a draw worth" (TopDeck.gg's
+  lever) — some organizers just don't want draws to be a possible outcome
+  at all, which a flat `ScoringPolicy{win,draw,loss}` numeric config doesn't
+  express (setting `draw: 0` still permits a drawn match to be reported; it
+  doesn't forbid the outcome).
+- Other confirmed levers (structural, not scoring): "Swiss Only" / "Swiss
+  plus Top Cut" / "Custom" phase structure, a round timer toggle, delayed
+  publication of pairings/standings, decklist public/private visibility —
+  none of these are scoring-related, noted only because they were the
+  concrete levers this help page actually documents (the page explicitly
+  does not enumerate point values, tiebreaker order, or pairing algorithm
+  detail — those may exist in-product but weren't in the fetched
+  documentation).
+- Source: [help.melee.gg/docs/tournament-setup-key-points/](https://help.melee.gg/docs/tournament-setup-key-points/)
+  (WebFetch succeeded directly).
+
+**Implication for `ScoringPolicy`'s design (CONTEXT.md open question #1,
+updated):** the flat `{win_points: u8, draw_points: u8, loss_points: u8}`
+shape already proposed is validated as the right MAIN shape (TopDeck.gg
+does exactly this) — the two things worth the maintainer's attention are
+whether v1 also wants (a) an explicit "are draws permitted at all" toggle
+separate from their point value (Melee.gg's lever), and (b) a
+`ByeTiebreakerHandling` axis if this phase ever wants to support a
+non-MTR bye convention (TopDeck.gg's lever) — not whether the win/draw/loss
+point fields themselves are the right idea, which this research confirms
+they are.

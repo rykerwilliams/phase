@@ -338,15 +338,31 @@ separate concern from `CustomFormatDef`/`LegacyRuleSet` (in-game CR
 rule-variation toggles), and phase 58 explicitly declined to design it,
 deferring to exactly this phase.
 
-Phase 58 PLAN.md's `LegacyRuleSet` shape, for concrete comparison:
+Phase 58 PLAN.md's `LegacyRuleSet` shape, **updated this session — the
+version below was current as of phase 58's own review round 4; the original
+draft of this section quoted an earlier, now-stale bool-based sketch**:
 ```rust
 LegacyRuleSet {
-    mana_burn: bool,
-    damage_uses_stack: bool,
-    pre_m10_wish_reaches_exile: bool,
+    mana_burn: ManaBurnPolicy,           // Modern | Obsolete
+    damage_timing: CombatDamageTiming,   // Modern | OnStack
+    wish_scope: WishOutsideGameScope,    // PostM10SideboardOnly | PreM10ReachesExile
     legend_rule_scope: LegendRuleScope,  // Modern | PreM14AnyController
 }
 ```
+Every axis converted from a bare `bool` to a typed enum during phase 58's
+own review process (each names a real historical-form-vs-modern-absence
+space, not an arbitrary on/off switch — the same reasoning `LegendRuleScope`
+already used). `reprint_policy` — present in earlier phase-58 drafts as a
+`LegalityRules` field — was moved OUT of the resolved rules struct entirely,
+onto a `CustomFormatDef` metadata side, after review found it sitting inside
+the enforced-ruleset struct while documented as "never enforced" was an
+internal contradiction. None of this changes the conclusion above — it's
+still `CustomFormatDef`-scoped, in-engine, single-game state with zero
+notion of rounds/match-points/standings, unrelated to `ScoringPolicy` either
+way — but citing the current shape rather than a superseded draft avoids
+this document going stale the way the original PROTOCOL_VERSION citation
+did (§10 below).
+
 This lives inside `CustomFormatDef` (engine crate, `types/format.rs`family),
 consumed by in-game resolvers (SBA checks, mana pool draining, Wish
 resolution) during a single game. It has no notion of rounds, match points,
@@ -359,3 +375,76 @@ consumer, or a lifecycle; forcing them together would violate the
 CLAUDE.md categorical-boundary principle at a crate-boundary grain, which is
 a stronger violation than the same-crate within-CR-section violations that
 principle was originally written to catch.
+
+## 10. Re-verification pass against current `main` — protocol version split
+
+Original research (§ above) pinned this phase's understanding to `main` at
+commit `d65111246`. Re-checked directly this session against current `main`:
+
+- `crates/lobby-broker/src/protocol.rs:104`: `pub const PROTOCOL_VERSION: u32
+  = 33;` (was 13 at research time — an 20-version jump from unrelated churn,
+  not evidence of anything specific to this phase).
+- `crates/lobby-broker/src/protocol.rs:133`: `pub const LOBBY_PROTOCOL_VERSION:
+  u32 = 1;` — did NOT exist at research time. `git log --oneline --all -S
+  "LOBBY_PROTOCOL_VERSION" -- crates/lobby-broker/src/protocol.rs` finds
+  exactly one commit, `6db58810b` ("fix(protocol): give the lobby its own
+  wire version, decoupled from the full game (#7606)").
+- Consequence for PR 2 (protocol + native server): bump
+  `LOBBY_PROTOCOL_VERSION`, not `PROTOCOL_VERSION` — tournament messages are
+  lobby-scoped (this phase's own architecture matches `LobbyManager`
+  exactly), and `6db58810b` exists specifically to let lobby-scoped wire
+  changes bump independently of the general game protocol. See CONTEXT.md
+  finding #4 (updated) for the full reasoning.
+
+## 11. `crates/draft-core` already has a tested Swiss-pairing implementation
+
+Found via `grep -rln "TournamentManager\|SwissPairing\|swiss_pair\|
+tournament_organizer\|joined_tournaments\|ScoringPolicy" crates/
+client/src/"` during this session's re-verification pass — the original
+research pass did not search for this and missed it entirely.
+
+- `crates/draft-core/src/types.rs:12`: `pub enum TournamentFormat` with
+  `Swiss` and `SingleElimination` variants.
+- `crates/draft-core/src/session.rs`, dispatch: `TournamentFormat::Swiss =>
+  generate_swiss_pairings(session, round, &mut rng)`.
+- `generate_swiss_pairings` (same file): builds `players_with_wins: Vec<
+  (PlayerId, u8, u8)>` from each seat's `match_records`, sorts descending by
+  wins, groups into score-bracket `Vec<Vec<(PlayerId, u8)>>`, shuffles each
+  bracket with a seeded `ChaCha20Rng`, builds a `prior_pairs:
+  HashSet<(PlayerId, PlayerId)>` rematch set from `session.pairings`, then
+  greedily pairs within each bracket (preferring a non-rematch partner via
+  `.position(|(pid, _)| !prior_pairs.contains(&(first.0, *pid)))`), carrying
+  a lone leftover player (`carry: Option<(PlayerId, u8)>`) down into the
+  NEXT bracket rather than backtracking within the current one. A player
+  still unpaired after the last bracket takes a bye; the caller credits it
+  as a match win (`ensure_match_record(...).match_wins += 1`, in the calling
+  function, since a Swiss bye scores as a win per the same MTR convention
+  #5314 already cites).
+- Sibling `generate_se_pairings` in the same file: standard seeded
+  single-elimination bracket (`[(0,7),(1,6),(2,5),(3,4)]` for round 1, then
+  pairs winners of adjacent prior-round matches) — gated to exactly 8 seats
+  by an `UnsupportedTournamentSize` check earlier in the calling function.
+- Tests: `test_swiss_pairings_8_players`, `swiss_pairings_include_bot_filled_seats`
+  (same file, `#[cfg(test)]` module).
+
+**Why this matters for #4615's confirmed bug (§4 above):** #4615's
+`backtrack_pair` used recursive backtracking with a base case that returned
+`None` (search failure) whenever exactly one player remained — killing the
+entire search for any odd-sized bracket. `draft-core`'s implementation has
+no backtracking recursion at all: an odd leftover is a `carry`, handled by
+plain data flow into the next loop iteration, not a search outcome. The bug
+class doesn't have a foothold in this shape. This is real, tested, existing
+precedent in the same repo for the exact algorithmic problem this phase
+needs solved — worth citing explicitly in PR 1 rather than re-deriving
+backtracking and re-discovering the same bug independently.
+
+**Scope caveat, so this isn't overclaimed as a drop-in reuse:** `draft-core`'s
+version is keyed to a single draft pod's types (`DraftSession`, `PlayerId`,
+`DraftPairing`), normally exactly 8 seats, with a lifecycle scoped to one
+draft. `TournamentManager`'s Swiss pairing needs to work for arbitrary lobby
+player counts (4 to 128+, per MTR Appendix E) across a tournament's full
+multi-round lifecycle. The *algorithm shape* transfers; the *code* would
+need real adaptation across a crate boundary with different lifecycles —
+whether that's done as literal shared code or two independently-tested
+implementations of the same shape is a PR 1 implementation decision, not
+resolved here.

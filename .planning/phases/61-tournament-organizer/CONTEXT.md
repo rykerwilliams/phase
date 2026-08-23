@@ -25,11 +25,25 @@ channel") is imprecise about which crate that channel actually lives in, but
 the underlying mechanism it's pointing at is real and the proposed reuse is
 still correct. Full citations are in RESEARCH.md; this file is the synthesis.
 
+**Re-verification pass (this update): still holds, plus one real update and
+one real find.** `main` has moved substantially since the original research
+(commit `d65111246`) — re-checked every "confirmed fact" below directly
+against current `main` rather than trusting the earlier pass. Everything
+held except `PROTOCOL_VERSION`'s specific value, which changed for a good
+architectural reason (finding #4, updated below) — and one thing the
+original pass missed entirely: `crates/draft-core` already has a working,
+tested Swiss-pairing algorithm that sidesteps #4615's confirmed backtracking
+bug by construction (finding #8, new below). Nothing here changes the
+"architecture claims all check out" conclusion; it strengthens it with more
+current evidence and one genuinely useful piece of prior art.
+
 ## Confirmed facts — verified against code this session
 
 Everything below was checked directly against `main` (via a worktree at
 `myfork/main`, commit `d65111246` at time of research) unless marked
-otherwise. See RESEARCH.md for exact file:line evidence.
+otherwise — findings marked "UPDATED" or "NEW" were re-verified or newly
+found against current `main` in a later pass. See RESEARCH.md for exact
+file:line evidence.
 
 1. **Greenfield, confirmed.** No `tournament.rs`, `TournamentManager`, or any
    tournament-related type exists anywhere in `crates/lobby-broker/src/` (or
@@ -72,18 +86,30 @@ otherwise. See RESEARCH.md for exact file:line evidence.
    field exists there). This is a precision correction, not a substantive
    correction — the reuse plan in #5314 is still exactly right.
 
-4. **`PROTOCOL_VERSION` is currently 13, not 12.** Confirmed at
-   `crates/lobby-broker/src/protocol.rs:38` (`pub const PROTOCOL_VERSION: u32
-   = 13;`), re-exported through `crates/server-core/src/protocol.rs:17` and
-   asserted by an existing test at `server-core/src/protocol.rs:1810`. Git
-   history (`git log -p -- crates/lobby-broker/src/protocol.rs`) shows the
-   12→13 bump landed in commit `360bf24cb` ("fix(engine): resolve mulligan
-   bottoming at each player's declare point (CR 103.5b) (#5236)") — an
-   unrelated mulligan fix, exactly as the task brief anticipated. **PR 2 in
-   the discussion's rollout must bump from 13→14, not 12→13** — the discussion
-   text doesn't hardcode the number so this doesn't require a doc change, but
-   it's worth flagging so whoever picks this up doesn't copy #4615's stale
-   "protocol v12" language from its own PR description.
+4. **UPDATED (re-verified against current `main`, not just `d65111246`):
+   `PROTOCOL_VERSION` is now 33, and — more consequential than the number
+   itself — the lobby now has its OWN separate wire version.** Re-checked
+   directly this session: `crates/lobby-broker/src/protocol.rs:104` (`pub
+   const PROTOCOL_VERSION: u32 = 33;`). A commit that landed *after* this
+   phase's original research, `6db58810b` ("fix(protocol): give the lobby
+   its own wire version, decoupled from the full game (#7606)"), introduced
+   `pub const LOBBY_PROTOCOL_VERSION: u32 = 1;` (`protocol.rs:133`) as a
+   genuinely separate constant from `PROTOCOL_VERSION` — confirmed by commit
+   message and by both constants existing side-by-side today, not a rename.
+
+   **This changes PR 2's plan for the better, not just the number.** Since
+   `TournamentManager` lives in `lobby-broker` and its new message variants
+   are lobby-scoped (per this phase's own architecture, matching how
+   `LobbyManager` already works), PR 2 should bump `LOBBY_PROTOCOL_VERSION`
+   specifically, not the general `PROTOCOL_VERSION` — decoupling tournament
+   wire changes from unrelated game-protocol churn, which is exactly the
+   separation `6db58810b` was introduced to enable. This wasn't an option
+   when the original research ran; it is now, and it's the more precise
+   choice given `LOBBY_PROTOCOL_VERSION` didn't exist as a concept before.
+   The original finding's phrasing ("PR 2 must bump from 13→14, not 12→13")
+   is retracted, not just updated — the correct instruction is now "bump
+   `LOBBY_PROTOCOL_VERSION`, currently 1, not the unrelated
+   `PROTOCOL_VERSION`, currently 33."
 
 5. **The Cloudflare Worker `is_empty()` predicate genuinely only checks lobby
    games today — bug #4 in the discussion is real and reproducible against
@@ -156,6 +182,53 @@ otherwise. See RESEARCH.md for exact file:line evidence.
      rollout plan (PR 4) rebuilds the frontend from scratch rather than
      reusing #4615's frontend code, but they're real, and PR 4 must not
      reintroduce them.
+
+8. **NEW — a working, tested Swiss-pairing implementation already exists in
+   `crates/draft-core`, missed by the original research pass entirely.**
+   `crates/draft-core/src/session.rs` has a real `TournamentFormat::Swiss`
+   variant (`crates/draft-core/src/types.rs:12`) and a `generate_swiss_pairings`
+   function, used to run mini-tournaments among players who just finished a
+   draft pod (Premier/Traditional/Sealed `DraftKind`s). Confirmed by direct
+   read, not a grep hit taken on faith:
+   - **Its pairing algorithm is architecturally simpler than what #4615
+     attempted, and — this is the actionable part — the shape difference
+     avoids #4615's confirmed backtracking-base-case bug (finding #7 above)
+     by construction, not by a base-case fix.** It sorts players into
+     score-group "brackets" by match wins, shuffles within each bracket for
+     pairing variety, then greedily pairs within a bracket while avoiding a
+     `prior_pairs: HashSet<(PlayerId, PlayerId)>` rematch set, and — critically
+     — if a bracket has an odd player out, it *carries that one player down to
+     the next bracket* (`carry: Option<(PlayerId, u8)>`) rather than
+     backtracking to try a different pairing within the same bracket. An
+     unpaired player after the last bracket takes a bye, credited as a match
+     win by the caller. There is no recursive backtracking anywhere in this
+     function — the entire bug class #4615 hit (the `players.len() == 1`
+     base case returning `None` and killing the whole search for odd
+     brackets) cannot occur in this shape, because there's no search to fail.
+   - **Tested**: `test_swiss_pairings_8_players` and
+     `swiss_pairings_include_bot_filled_seats` (`session.rs`, same file)
+     exercise this directly.
+   - **Scope difference, so this is prior art to learn from, not a
+     drop-in reuse candidate as-is**: this implementation is keyed on
+     `DraftSession`/`PlayerId`/`DraftPairing` types scoped to a single draft
+     pod (typically 8 seats, `UnsupportedTournamentSize` enforces exactly 8
+     for its sibling single-elimination path), not the arbitrary,
+     lobby-wide player counts (4 to 128+, per the discussion's own MTR
+     Appendix E table) the tournament-organizer needs to support. Literal
+     code sharing would need real type-level unification across two crates
+     with different lifecycles (`draft-core`'s pod exists only for the
+     draft's duration; `lobby-broker`'s tournament outlives any single
+     match) — not attempted here, and not free.
+   - **Recommendation for whoever picks up PR 1**: adopt the same
+     *algorithm shape* (greedy-within-bracket + carry-one-down, no
+     backtracking) for `TournamentManager`'s Swiss pairing, explicitly
+     citing this existing implementation as the precedent, rather than
+     re-deriving a backtracking search and re-discovering #4615's bug from
+     scratch. Whether that's implemented as literal shared code (a small
+     crate, or moving the algorithm into a place both `draft-core` and
+     `lobby-broker` can depend on) or as two independently-tested copies of
+     the same shape is an implementation-time call PR 1 should make
+     explicitly, not leave implicit.
 
 ## What this session did NOT re-verify (explicitly out of scope per the task)
 

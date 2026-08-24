@@ -954,6 +954,88 @@ so there's a record of what's already been resolved.
   > format-name list in `config_format_tag()` (`scrape.rs`) for a correct
   > fallback tag.
 
+### [feature] Deck builder silently drops the printing/set a player picked or imported, instead of tracking it
+
+- **Status:** open
+- **Source:** 2026-08-24. Surfaced while resolving discussion #5312's
+  custom-format-engine proposal (PR #7703, round 11) — the question there
+  was whether Old School 93-94/95 needed printing-level LEGALITY
+  enforcement, resolved as no (confirmed `legal_sets` membership is the
+  same oracle-card-level legality model every format including Premodern
+  already uses — no format anywhere in this engine checks printing/frame/
+  foil for legality, `LegalityFormat::Premodern`,
+  `crates/engine/src/types/format.rs:243`). This item is a genuinely
+  separate, real, general idea that came up along the way and is worth its
+  own backlog entry rather than being bundled into that PR.
+- **Context (verified against the repo this session, not assumed):**
+  - The deck builder already has the UI shape for this — it isn't a
+    from-scratch feature. `PrintingPickerModal.tsx`
+    (`client/src/components/deck-builder/PrintingPickerModal.tsx:142-203`)
+    lets a player browse every printing of a card (art/set/collector-number
+    grid) and pick one. But selecting a printing only calls
+    `setArtOverride(oracleId, {...})` (`PrintingPickerModal.tsx:52-62`),
+    which writes into `usePreferencesStore`'s `artOverrides` — a
+    client-local, oracle-id-keyed cosmetic preference used purely to
+    resolve art (`useCardImage.ts`), never persisted to a saved deck and
+    never sent to the engine. It's also only reachable from the deck
+    list's context menu (`useDeckBuilder.ts:106-132`), not the add-card
+    flow itself.
+  - Import parsing already captures the data, then throws it away.
+    `DeckEntry.sourcePrinting` (`client/src/services/deckParser.ts:5-9`,
+    type at `useCardImage.ts:25-28`) is populated when importing decklists
+    in formats that embed set codes (Forge/MTGA/Archidekt, regexes at
+    `deckParser.ts:101,186`) — but it's explicitly discarded at the
+    `expandParsedDeck`/`expandEntries` boundary (`deckParser.ts:45-73`,
+    which only pushes `entry.name`) before producing `ExpandedDeck`
+    (`main_deck`/etc. are plain `string[]` of names). It's used downstream
+    only for hover-preview art (`CardEntryRow.tsx:120`, `DeckStack.tsx`)
+    and never reaches `deckCatalog.ts`'s saved-deck shape (no matches
+    there) — so importing a decklist that names specific printings loses
+    that detail permanently the moment it's saved.
+  - The engine has no field to receive it even if the frontend kept it.
+    `PrintedCardRef { oracle_id, face_name }`
+    (`crates/engine/src/types/card.rs:89-92`) and the deck-submission
+    struct `PlayerDeckList` (`crates/engine/src/game/deck_loading.rs:120-147`
+    — `main_deck`/`sideboard`/`commander`/etc. are all `Vec<String>` of
+    names) have no set-code field anywhere. Card resolution is name-only
+    (`CardDatabase::get_face_by_name`, `crates/engine/src/game/printed_cards.rs:1049`).
+  - **Explicitly NOT a legality feature.** This is about recording/
+    preserving a player's chosen printing (so importing a decklist that
+    names one doesn't silently lose it, and a deliberate in-app choice
+    persists across saves) — not about validating it against anything.
+    No format in this engine enforces printing-level legality today and
+    this item doesn't propose changing that.
+  - **Related but genuinely separate — don't conflate:** making the
+    frontend's `ArtChainEntry` `{type: "oldest"}` display-default
+    legal-set-aware (so "show me the oldest printing" respects a format's
+    declared `legal_sets` instead of picking a promo/non-tournament
+    printing) is a different feature — a display-default fix, independent
+    of whether a player's chosen printing is ever persisted. File that as
+    its own item if pursued.
+- **Prompt:**
+  > Spec out (research/plan only, no implementation yet) how phase.rs's
+  > deck builder should track which specific printing (set code) a player
+  > picked or imported for a card, instead of silently discarding it.
+  > Today: `PrintingPickerModal.tsx` already lets a player pick a printing
+  > but only writes to `usePreferencesStore`'s local `artOverrides`
+  > (cosmetic-only, never persisted or sent to the engine). Import parsing
+  > (`deckParser.ts`'s `DeckEntry.sourcePrinting`) already captures set +
+  > collector-number when importing Forge/MTGA/Archidekt decklists, but
+  > discards it at the `expandParsedDeck`/`expandEntries` boundary before
+  > producing `ExpandedDeck` (plain `string[]` of names). The engine's
+  > `PrintedCardRef`/`PlayerDeckList` have no set-code field at all. Scope
+  > as: (1) stop dropping `sourcePrinting` at the `expandParsedDeck`
+  > boundary and persist it through `deckCatalog.ts`'s saved-deck shape;
+  > (2) wire `PrintingPickerModal` into the add-card flow itself, not just
+  > the post-add context menu; (3) decide whether/how the chosen printing
+  > should cross the wire to the engine (`PlayerDeckList` gaining a
+  > parallel per-card set-code field) for round-tripping, NOT for legality
+  > enforcement — no format in this engine checks printing for legality
+  > (confirmed against `LegalityFormat::Premodern`), and this spec should
+  > not propose changing that. Treat "make `ArtChainEntry`'s oldest-printing
+  > display default legal-set-aware" as a separate, unrelated backlog item
+  > — don't fold display-default logic into this spec.
+
 ---
 
 ## Done

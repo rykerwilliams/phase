@@ -25,6 +25,77 @@ so there's a record of what's already been resolved.
 
 ## Open
 
+### [bug-fix] Transform / flip / morph silently drop a carried resolution shield (CR 611.2a)
+
+- **Status:** open
+- **Source:** 2026-09-05, `/review-impl` MED finding on the issue #8485 fix.
+- **Context:** #8485 made resolution-created replacements (prevention shields,
+  regeneration shields, damage redirects) survive the CR 613.1 layer reset. Their
+  documented removal paths are an expiry prune (`turns.rs`: cleanup,
+  end-of-combat teardown, untap step) and a zone change (CR 400.7). Three
+  in-place FACE rewrites also drop them, because each wholesale-assigns the live
+  replacement store from a face snapshot:
+  `printed_cards::apply_back_face_to_object` (transform / specialize),
+  `flip.rs` (CR 710.1b), and `morph.rs` (turn face down, CR 708.2a).
+- **Why it is wrong:** CR 611.2a — a continuous effect from the resolution of a
+  spell or ability "lasts as long as stated by the spell or ability creating it".
+  None of transform, flip, or turning face down is a zone change (CR 400.7) and
+  none is a stated duration, so a regenerated or shielded creature that transforms
+  should keep its shield. Today it silently loses it.
+- **Deliberately not fixed in #8485:** `flip.rs` and `morph.rs` were outside that
+  change's frozen scope, and the `printed_cards.rs` seam was filtered to fix a
+  worse HIGH (a transform round-trip was seeding `base_replacement_definitions`
+  with a `Resolution` def, which made the CR 613.1 carry-over duplicate the shield
+  once per layer pass without bound). Shield LOSS was the correct trade against
+  unbounded shield DUPLICATION, but it is still wrong.
+- **Prompt:** Make a resolution-created replacement survive transform, flip, and
+  turning face down. The three seams that wholesale-assign the live replacement
+  store from a face snapshot are `printed_cards::apply_back_face_to_object`,
+  `flip.rs`, and `morph.rs`. The shape that works is the one
+  `layers::seed_live_characteristics_from_base` already uses: rebuild from the
+  face/base baseline while carrying forward the `Resolution`-origin members of the
+  live store, via `game_object::reseed_replacements_carrying_resolution_effects`.
+  CRITICAL: whatever you do, a `Resolution`-origin def must NEVER end up in
+  `base_replacement_definitions` — that breaks the carry-over's idempotency
+  precondition and duplicates the shield every pass. `snapshot_object_face`
+  filters them out for exactly that reason; keep that filter and carry the live
+  members across separately. Regression-test a transform round-trip, a flip, and a
+  morph over a live shield, asserting the shield survives AND that the count does
+  not grow across two `evaluate_layers` passes.
+
+### [infra] `add_target_replacement`'s two registry pushes bypass the floating-install authority
+
+- **Status:** open
+- **Source:** 2026-09-05, `/review-impl` MED finding on the issue #8485 fix.
+- **Context:** #8485 introduced
+  `game::effects::install_floating_damage_replacement` as the single authority for
+  installing a source-scoped damage shield into
+  `state.pending_damage_replacements`, latching `source_controller` (CR 113.8 /
+  CR 109.5: the controller of an activated ability is the player who activated it)
+  and, where applicable, the CR 113.7a `source_object` host anchor.
+  `effects/add_target_replacement.rs` still pushes raw at two sites — its
+  `TargetFilter::None` global arm and its `TargetRef::Player` arm — and neither
+  latches `source_controller`.
+- **Consequence:** for definitions installed through those two arms, a
+  controller-relative gate in the pending scan resolves against
+  `state.active_player` instead of the installer, so it can answer the wrong player
+  when the installer is not the active player. Pre-existing behavior, not a
+  regression from #8485.
+- **Deliberately not fixed in #8485:** latching the controller there is a behavior
+  change to a population that change did not otherwise touch, and it was too late
+  in that work to take it without measurement.
+- **Prompt:** Route `effects/add_target_replacement.rs`'s two
+  `state.pending_damage_replacements.push(...)` sites (the `TargetFilter::None`
+  global arm and the `TargetRef::Player` arm) through
+  `game::effects::install_floating_damage_replacement`. Pass `anchor_zones: &[]`
+  unless you can argue a host anchor is correct for that arm, since anchoring a
+  population that is already registry-hosted is over-matching. Expect the
+  `source_controller` latch to CHANGE behavior for controller-relative gates on
+  those definitions — from `state.active_player` to the installer — which CR 113.8
+  and CR 109.5 say is correct; find or write a fixture where the installer is not
+  the active player and pin the new reading. Then delete the "scope of that claim"
+  caveat from `install_floating_damage_replacement`'s doc comment.
+
 ### [infra] Two independent copies of the CR 510.1c/702.19b combat-damage division in the integration tests
 
 - **Status:** open

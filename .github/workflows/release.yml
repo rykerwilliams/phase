@@ -998,11 +998,10 @@ jobs:
           retention-days: 90
 
   deploy-server:
-    name: Deploy Server (beebs, disabled)
+    name: Deploy Server (AWS)
     needs: [resolve-release-ref, build-server-image, release]
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: ${{ false }}
     permissions:
       contents: read
       packages: read
@@ -1010,18 +1009,50 @@ jobs:
       RELEASE_TAG: ${{ needs.resolve-release-ref.outputs.release_tag }}
       IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/phase-server
     steps:
+      - name: Check deploy secrets
+        # Skip gracefully (rather than a static `if: false`) so the job goes
+        # live automatically the moment DEPLOY_HOST/DEPLOY_SSH_KEY/DEPLOY_USER
+        # are added as repo secrets — no follow-up PR to flip a gate. Mirrors
+        # the macos-signing secret check in build-tauri above.
+        id: deploy-secrets
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_USER; do
+            if [ -z "${!name:-}" ]; then
+              echo "::warning::Missing deploy secret: ${name}"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::warning::Skipping server deploy — AWS deploy secrets not configured."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        shell: bash
+
       - name: Set up SSH
+        if: steps.deploy-secrets.outputs.skip != 'true'
+        env:
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p 29292 -H ${{ secrets.DEPLOY_HOST_BEEBS }} >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$DEPLOY_SSH_PORT" -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to beebs
+      - name: Deploy to AWS
+        if: steps.deploy-secrets.outputs.skip != 'true'
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
         run: |
-          SSH="ssh -p 29292 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST_BEEBS }}"
+          SSH="ssh -p $DEPLOY_SSH_PORT -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           IMAGE="${IMAGE_NAME}:${RELEASE_TAG}"
 
           $SSH "set -euo pipefail \
@@ -1043,11 +1074,14 @@ jobs:
               -e RUST_LOG=info \
               '$IMAGE'"
 
-          echo "Deployed $IMAGE to beebs"
+          echo "Deployed $IMAGE to AWS"
 
       - name: Verify deployment
+        if: steps.deploy-secrets.outputs.skip != 'true'
+        env:
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT || '22' }}
         run: |
-          SSH="ssh -p 29292 -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST_BEEBS }}"
+          SSH="ssh -p $DEPLOY_SSH_PORT -i ~/.ssh/deploy_key ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           $SSH "set -euo pipefail \
             && for attempt in \$(seq 1 30); do \
               if curl -fsS http://127.0.0.1:9374/health; then \

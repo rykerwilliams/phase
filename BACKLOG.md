@@ -25,6 +25,59 @@ so there's a record of what's already been resolved.
 
 ## Open
 
+### [bug-fix] Unbounded-expiry resolution riders stay layer-fragile — the one subclass issue #8485 deliberately did not fix
+
+- **Status:** open
+- **Source:** 2026-09-05, `/review-impl` LOW finding on the issue #8485 fix
+  (Maze of Ith / CR 611.2c resolution-shield durability). Recorded here rather
+  than fixed in that PR, and recorded here rather than left only in a doc
+  comment, because it is a real hole in that change's stated class.
+- **Context:** #8485's stated class is "every continuous replacement/prevention
+  effect created by the RESOLUTION of a spell or ability and hosted on a
+  battlefield permanent survives the CR 613.1 layer reset". One subclass is
+  excluded: `GameObject::install_resolution_replacement`
+  (`crates/engine/src/game/game_object.rs`) refuses to stamp
+  `ReplacementOrigin::Resolution` on a definition whose `expiry` is `None`, and
+  installs it live-only instead — i.e. exactly the pre-#8485 behavior, still
+  wiped by the next layer pass.
+- **Why the fail-closed arm is CORRECT and must not simply be removed:** all
+  three prunes that can remove a carried definition — `turns::execute_cleanup`,
+  `turns::complete_end_combat_teardown`, and the untap-step prune — key on
+  `expiry` ALONE. A `Resolution`-stamped definition is carried across every
+  CR 613.1 reset, so its only removal paths are an expiry prune and a zone
+  change. Carrying one with `expiry: None` would therefore make it **immortal**,
+  which is strictly worse than layer-fragile. A bare `debug_assert!` is also the
+  wrong instrument: it would fire in debug builds on a legitimate path.
+- **The reachable population:** `effects::add_target_replacement`'s
+  unstated-duration NON-shield rider.
+  `ReplacementDefinition::with_resolution_shield_expiry` is gated on
+  `shield_kind.is_shield()` precisely so durable non-shield riders keep
+  `expiry: None` (the CR 611.2b `ControllerControlsSource` lock and the
+  CR 702.84a `UntilHostLeavesPlay` rider are the audited members, and those are
+  base-resident by design and correctly excluded). `prevent_damage`,
+  `create_damage_replacement` and `regenerate` all stamp an expiry
+  unconditionally, so none of them can reach the arm.
+- **What a real fix needs (CR 611.2a):** a lifetime the engine can actually
+  END for the unstated-duration rider class — either a representable `expiry`,
+  or an applicability gate on the same footing as
+  `add_target_replacement::stamp_for_as_long_as_controlled_gate`'s
+  `ReplacementCondition::ControllerControlsSource`, or a demotion at parse time
+  the way `parser::oracle::demote_unenforceable_replacement_lifetimes` already
+  demotes refused prevention windows to `Effect::Unimplemented`. Whichever is
+  chosen, the invariant to preserve is: a definition is `Resolution`-stamped
+  **iff** some prune can end it.
+- **Prompt:** Investigate the unstated-duration (`expiry: None`) non-shield
+  rider class produced by `Effect::AddTargetReplacement`. Determine, from the
+  parsed corpus, which printings actually reach
+  `GameObject::install_resolution_replacement`'s fail-closed arm
+  (`def.expiry.is_none()`) and what window their Oracle text states. Then decide
+  per CR 611.2a whether each wants a representable `RestrictionExpiry`, a
+  runtime applicability gate, or a parse-time demotion to
+  `Effect::Unimplemented`. Do NOT simply remove the fail-closed arm: carrying an
+  unbounded definition across the CR 613.1 reset makes it immortal, because all
+  three `turns.rs` prunes read `expiry` alone. Preserve the invariant that a
+  definition is stamped `Resolution` if and only if some prune can end it.
+
 ### [feature] Connive N (N>1) + multi-draw-replacement interaction — follow-up from the Dredge/Bazaar fix
 
 - **Status:** open

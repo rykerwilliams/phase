@@ -1,0 +1,296 @@
+# PR 4/4 Tournament Organizer Frontend — Phase Charter (revision 3, FROZEN)
+
+**Status: FROZEN as of charter review round 3 (clean verdict, 0 blocking findings). Phase 1 implementation begins from this charter.**
+
+**Mode:** charter (revision of the v2 charter after review round 2; input shape = "draft plan with accumulated findings"). Produced by `/engine-planner` charter mode.
+**Worktree:** `C:\git\phase\.claude\worktrees\tournament-organizer-pr4-frontend` · branch `feat/tournament-organizer-pr4-frontend` · **BASE_SHA `765c4ebda16a7ba17bb83c5b57d6ce1c6cf7e2be`** (verified clean tree).
+**Scope of this revision:** the two reviewer-named blocking gaps inside S4 part 3, plus four cheap non-blocking notes, and nothing else. Phase boundaries, S1/S2/S5–S9, the round-1 gap-1 and gap-2 fixes, and all Step 0 premises are carried forward **verbatim** from v2. The recursive phase-fit table is unchanged and is restated in full below.
+
+## Round-3 review: clean, plus 5 non-blocking residual notes for executors (do not require another charter round)
+
+1. **Phase 3's `FOUR_FORM_STEMS` refactor description is imprecise — hand this precision fix to the phase 3 executor.** `entry` is not in scope at the current `:201`; `load(locale, entry.ns)` requires restructuring the loop so `load` runs per-entry (inside the entry loop), not moving one line. Converting all 16 bare-string entries to `{ns, stem}` pairs touches roughly 19 lines, not four. Design intent is unchanged — this is purely "the diff will look different than the charter's shorthand suggested," surfaces immediately at the keyboard, not a planning defect.
+2. **The (a)-over-(b) justification is a slight overstatement, not a design defect.** Parameterizing `FOUR_FORM_STEMS` only closes the "English itself must author all 4 forms" hole if the author remembers to register the stem — the same act of memory the rejected convention-only route also required. Still strictly better than v2 (registration was structurally impossible before; now it's possible), so the chosen remediation stands. If a future PR wants this fully auto-enforced with no registration list, an auto-discovering variant ("every `*_one` key in any `en` catalog needs `_few`/`_many`/`_other` siblings") is the way; out of scope here.
+3. **`boundary-guardrails.test.ts` is described as uniformly regex/marker-scoped; one assertion (`:70`) is a bare `toContain`.** Doesn't invalidate phase 1's re-scoped assertion — the regex-scoping pattern is genuinely the dominant house convention there — just don't cite that file as *exclusively* regex-scoped.
+4. **Cosmetic labeling asymmetry:** phase 1's `DEFERRED(phase 2)` (abort-on-reconnect) lacks the explicit "Discharges phase 1's…" label phase 2's other deferral-discharge rows carry. No functional gap — phase 2's existing bullet already covers it substantively.
+5. Out-of-scope-creep was checked against the codebase and the phase-fit record (PLAN.md itself isn't in the run directory) — nothing read as creep either way.
+
+## What changed in revision 3
+
+| Finding | Fix applied | Where it lands |
+|---|---|---|
+| **A (blocking) — S4 part 3 prescribed a broken enforcement mechanism.** It told a phase to append a tournament stem to `FOUR_FORM_STEMS`. **Verified false:** `FOUR_FORM_STEMS` has exactly one use site (`localeParity.test.ts:202`), inside a loop whose `target` is `load(locale, "draft.json")` (`:201`) — hardcoded, for every locale, regardless of stem. Appending `entrants` would search for `entrants_one` **inside `draft.json`**, producing 28 guaranteed failures (7 locales × 4 forms), never zero. | **Chose remediation (a): parameterize the stem list by namespace.** `FOUR_FORM_STEMS` becomes a list of `{ns, stem}` pairs; the loop calls `load(locale, entry.ns)`. All 16 existing entries keep `ns: "draft.json"`, so the draft coverage is bit-identical and cannot destabilize. Reasoning and the rejected alternative are stated in S4 part 3. `client/src/i18n/__tests__/localeParity.test.ts` added to the scope-path hints of phases 3, 4 and 5 (test-file edit — **excluded from T2 counting**, so no phase's unit or scope-path count moves; the table is restated unchanged). | S4 part 3; scope-path hints of phases 3, 4, 5; phase 3 verification plan. |
+| **B (blocking) — S4 part 3 framed four forms as "Polish only."** Part 1's key parity (`:272-279`) is exact **in both directions**, so four English suffixes oblige four suffixes in **all 7 catalogs**. Verified against existing convention: `en/draft.json:219-222` and `fr/draft.json:220-221` both carry `deck_{one,few,many,other}` redundantly. | S4 part 3 reframed: *any* count-bearing key needing Polish's four forms is authored with all four suffixes in **all 7 catalogs including English**, in the same commit. The seductive wrong "fix" (deleting Polish's `_few`/`_many` to clear an extra-key failure) is called out by name. | S4 part 3. |
+| **1 (note) — phase 3's `DEFERRED(phase 4)` had no explicitly-linked discharging row.** | Phase 3's deferral split into two explicitly-named halves; **phase 4's `t()`-routing bullet relabelled** to name the deferral it discharges. Phase 5's key-completeness row already carried its label. | Phase 3 verification plan; phase 4 verification plan. |
+| **2 (note) — S3's discriminating test covered only the detach direction.** Nothing at phase 2's boundary asserted that a *first* tournament subscriber with zero lobby subscribers actually emits `SubscribeLobby`. Verified: `SubscribeLobby` → `Outbound::AddSubscriber` (`crates/lobby-broker/src/broker.rs:317-332`) is the only path into the delivery set. | One attach-side bullet added to phase 2's verification plan, moving detection from phase 5 to phase 2's own boundary. | Phase 2 verification plan; S3. |
+| **3 (note) — phase 1's static-source-text assertion could false-positive on prose.** A doc comment explaining *why* the frames are absent (which S3 wants; precedent `brokerClient.ts:595` mentions `UnsubscribeLobby` in exactly such a comment) would trip a naive `source.includes(...)`. **Verified: no `stripComments`-style helper exists anywhere in `client/src`** — the house convention in `adapter/__tests__/boundary-guardrails.test.ts` is regex/marker-scoped `expect(source)` assertions. | Assertion re-scoped to `send(` call arguments via regex, with a local comment-strip named as the fallback. | Phase 1 verification plan; S3. |
+| **4 (note) — phase 3's T2 verdict silently depends on the grouping convention.** | One explicit sentence added: ungrouped 17, grouped 5; consistent with the orchestrator's own adjudication; informational, not a defect. | Phase 3 scope-path hints; phase-fit table footnote. |
+
+Net effect on sizing: **zero** source scope-paths added to any phase. The phase-fit table is unchanged from v1/v2.
+
+---
+
+## The Charter — 5 phases, linearly ordered
+
+### Phase 1 — Wire layer: type mirrors + the `requestOver` primitive
+
+**Goal.** Land the complete, token-free TypeScript mirror of the tournament wire surface, and the single generic `requestOver` primitive plus the seven RPC helpers and the subscription helper built on it — all as pure functions over a *borrowed* `PhaseSocket`. This phase establishes, and proves by construction, two properties:
+
+1. **The tournament client owns no socket** — zero references to `openPhaseSocket`, zero `.close()` calls.
+2. **The tournament client owns no subscription** — `subscribeTournamentsOver` sends `SubscribeLobby` **zero times** and `UnsubscribeLobby` **zero times**. It attaches a message listener and handles only inbound `TournamentListUpdate` / `TournamentUpdate` / `TournamentRemoved`; its returned detach removes that listener and sends nothing. Acquiring and releasing the *shared* lobby subscription is entirely the store's job in phase 2. This is a deliberate departure from the `subscribeLobbyOver` precedent (`brokerClient.ts:650`/`:656`, which does send both frames) — mirroring that precedent here would place the frames in a file phase 2 does not own, making seam S3's unified refcount unfixable at its assigned boundary. See S3.
+
+**Scope-path hints.**
+```
+client/src/adapter/types.ts
+client/src/services/tournamentClient.ts
+client/src/adapter/__tests__/tournamentTypes.test.ts
+client/src/services/__tests__/tournamentClient.test.ts
+```
+
+**Verification plan.**
+- Fixture of the probed bytes (including `{"Reported":{"Decisive":{…}}}`, bare-number `arity`, flat `scoring`, both `Tiebreaks` arms, `outcome: null`, `"Bye"`, `{"Forfeit":{…}}`) type-checks against the mirrors and round-trips through `JSON.parse`/`stringify`. A flattened `PairingOutcome` mirror must fail to compile against this fixture — that is the discriminating property.
+- Request-frame builders byte-match the Rust literals in `protocol.rs`.
+- `it.each` over all seven helpers × five paths (success / server `Error` / abort / timeout / socket-drop): the fake socket's `close` is **never** called. Each negative carries its paired positive reach-guard — assert the promise actually settled with the expected discriminated result, so an early return cannot satisfy the negative vacuously.
+- **Subscription helper sends nothing.** Drive `subscribeTournamentsOver` through a full attach → inbound-message → detach cycle against the fake socket and assert `send` was called **zero times** across the whole cycle. **Paired positive reach-guard:** in the same test, an inbound `TournamentUpdate` frame must reach the registered handler and be delivered with the expected parsed shape — otherwise a helper that never wired up at all would satisfy the zero-send assertion vacuously.
+- **Static source-text assertion** *(re-scoped, revision 3 note 3)*: `tournamentClient.ts` contains no `openPhaseSocket` and no `.close(`, **and no `send(` call whose argument text mentions `SubscribeLobby` or `UnsubscribeLobby`**.
+
+  Scope this to *call arguments*, not to the whole file. S3 positively wants an explanatory doc comment in `tournamentClient.ts` saying why these frames are deliberately absent — the established precedent for exactly that is `brokerClient.ts:595`, which names `UnsubscribeLobby` inside an explanatory comment. A naive `expect(source).not.toContain("SubscribeLobby")` would fail on the comment the seam asks for. Two acceptable implementations, in order of preference:
+  1. **Argument-scoped regex** (preferred): assert `source.match(/\bsend\s*\([^)]*(?:Un)?SubscribeLobby/g)` is `null`. This is the house convention — `client/src/adapter/__tests__/boundary-guardrails.test.ts` scopes every one of its source assertions with regexes and index markers rather than bare `toContain`.
+  2. **Strip comments first**, then assert absence. Note: **no `stripComments`-style helper exists anywhere under `client/src`** (verified — grep for `stripComments|removeComments|withoutComments` returns nothing). If you take this route you are authoring a new local helper in the test file; prefer route 1 and avoid it.
+
+  Either way the assertion stays load-bearing for S3 (see S3), and it must carry a **positive control**: a fixture string containing `send(JSON.stringify({ type: "SubscribeLobby" }))` must match the pattern, so a regex that silently matches nothing cannot pass vacuously.
+- Reply-matching: every matcher filters `data.code === code`; `TournamentCreated` is the sole tag-only exception (code is server-minted). Hostile fixture — a client holding two tournaments receives a same-tag reply for the *other* code and must not settle.
+- `node scripts/check-protocol-version.mjs` exit 0.
+- **`DEFERRED(phase 5)`**: proof that a real, store-owned, *subscribed* socket receives the `ToSubscribers`-only replies for `startRound` / `report` / `drop` / `end`. No socket exists in this phase, and no *mounted, subscribed* socket exists in phase 2 either — the fake here proves the matcher, not the delivery. Phase 5 is the first phase in which a subscribed socket is actually mounted, and its verification plan names this row as fulfilling this deferral. Interim structural verification: green `tsc -b --noEmit` plus the fake-socket suite above.
+- `DEFERRED(phase 2)`: abort-on-reconnect behavior — `pendingJoinRpcAborts` registration is the store's job.
+
+**Deferral list.**
+- Store actions, credential persistence, socket acquisition → phase 2.
+- **All `SubscribeLobby`/`UnsubscribeLobby` frame-sending for the shared subscription → phase 2.**
+- **End-to-end proof of `ToSubscribers`-only delivery on a real subscribed socket → phase 5.**
+- i18n for any user-visible error copy → phase 3.
+- Rendering of any mirrored type → phase 4.
+- Route/nav reachability → phase 5.
+
+---
+
+### Phase 2 — Store integration: credentials, unified subscription refcount, abort wiring
+
+**Goal.** Give the tournament RPCs their socket. Add the persisted `tournamentCredentials` map, the seven store actions following the `resolveGuest` template verbatim, the ref-counted tournament subscription, and reconnect/teardown abort wiring — with the `SubscribeLobby` refcount **unified across lobby and tournament subscribers** (see seam S3). Because phase 1 delivered `subscribeTournamentsOver` frame-free, this store is the sole authority for those frames and the unification is achievable entirely within `multiplayerStore.ts`.
+
+**Scope-path hints.**
+```
+client/src/stores/multiplayerStore.ts
+client/src/stores/__tests__/multiplayerStore.tournament.test.ts
+```
+
+**Verification plan.**
+- Credentials survive rehydrate (added to the `partialize` partition), are bounded with eviction, and are deleted on `TournamentRemoved`. Hostile fixture — credentials held for two tournaments; the gated action must send the *matching* code's token, and a `startTournamentRound` for a code whose `organizer_token` is absent must return `{ok:false, reason:"rejected"}` without hitting the wire.
+- **Unified refcount (S3), detach direction:** with one lobby subscriber and one tournament subscriber on the same socket, detaching the lobby subscriber must **not** send `UnsubscribeLobby`; only the last subscriber of *either* kind may. Revert-failing assertion: restore two independent refcounts and this goes red.
+- **Unified refcount (S3), attach direction** *(new, revision 3 note 2)*: with **zero** lobby subscribers, the *first* `subscribeTournaments` must actually put `SubscribeLobby` on the wire. Broker-side this is not optional and not implicit — `LobbyClientMessage::SubscribeLobby` → `Outbound::AddSubscriber` (`crates/lobby-broker/src/broker.rs:317-332`) is the **only** path that inserts this connection's `tx` into the delivery set, so a tournament subscriber that never sends the frame receives nothing at all, silently. Assert the frame went out, exactly once, on the store's socket. **Paired negative sibling:** a *second* tournament subscriber attaching while the first is live must **not** send a redundant `SubscribeLobby` — that is what makes it a refcount rather than a per-subscriber send. Without this bullet the failure is only observable in phase 5, as a page that renders but never updates; this moves detection to phase 2's own boundary.
+- Late-resolving `subscribeTournaments` after the caller detached must not leave a listener attached (`if (cancelled) { detach?.(); return; }` semantics at the store level).
+- In-flight tournament RPCs abort on the `reconnecting` transition and on `closeSubscriptionSocket`, via `pendingJoinRpcAborts`; the `finally` removes the controller and never closes a socket.
+- Reconnect re-binds the tournament attach-detach on the same `onStateChange` path where `lobbyAttachDetach` is re-bound.
+- `DEFERRED(phase 5)`: component-level unmount-during-in-flight-connect (#4615's original bug reproduced then proven fixed) — no component exists yet. Interim structural verification is the store-level late-resolve test above.
+- `DEFERRED(phase 5)`: organizer-only controls gated on a held token, as rendered UI.
+
+**Deferral list.** All rendering, all i18n, all routing → phases 3–5.
+
+---
+
+### Phase 3 — i18n `tournament` namespace registration
+
+**Goal.** Register the `tournament` namespace across every registration surface and author the full English catalog plus six parity mirrors, so phases 4 and 5 can call `t()` without a type error. Also add the `nav.tournament` key to the `menu` namespace — the nav label resolves there, not in `tournament`. Additionally, perform the one-time, behavior-preserving `FOUR_FORM_STEMS` namespace parameterization that makes S4 part 3 enforceable for any namespace (see S4).
+
+**Scope-path hints.**
+```
+client/src/i18n/index.ts
+client/src/i18n/react-i18next.d.ts
+client/src/test-setup.ts
+client/src/i18n/locales/en/tournament.json
+client/src/i18n/locales/es/tournament.json
+client/src/i18n/locales/fr/tournament.json
+client/src/i18n/locales/de/tournament.json
+client/src/i18n/locales/it/tournament.json
+client/src/i18n/locales/pt/tournament.json
+client/src/i18n/locales/pl/tournament.json
+client/src/i18n/locales/en/menu.json
+client/src/i18n/locales/es/menu.json
+client/src/i18n/locales/fr/menu.json
+client/src/i18n/locales/de/menu.json
+client/src/i18n/locales/it/menu.json
+client/src/i18n/locales/pt/menu.json
+client/src/i18n/locales/pl/menu.json
+client/src/i18n/__tests__/localeParity.test.ts
+```
+
+**Counting note (explicit, so no future reader re-derives it — revision 3 note 4).** This phase counts as **5** grouped source scope-paths: three authored modules (`i18n/index.ts`, `react-i18next.d.ts`, `test-setup.ts`) plus two translation-mirror groups (the 7 `tournament.json` files as one, the 7 `menu.json` files as one). `localeParity.test.ts` is a **test file and is excluded from T2 counting outright** — it appears in this list solely because the executor needs to know it is in scope to edit. **Ungrouped, this phase would be 3 + 14 = 17 source paths, which is ≥ 13 and would fire T2.** Grouped per the counting rule it is 5 and does not. That grouping is the charter-wide rule and is consistent with the orchestrator's own top-level adjudication of this task — it is stated here explicitly, not to re-litigate it, but so a future re-adjudicator does not mistake the discrepancy for an error.
+
+**Verification plan.**
+- Existing `client/src/i18n/resources.test.ts` is already parameterized over discovered locales and files, so it covers the new catalogs automatically without editing the test: key-parity across all 7 locales, and BOM-free valid UTF-8 per new file. Discriminating — drop one leaf from `de/tournament.json` and the parity `toEqual({missing:[],extra:[]})` names it.
+- **Existing `client/src/i18n/__tests__/localeParity.test.ts` is the second auto-discovering locale gate and also covers the new catalogs without editing.** Its `namespaces` and `locales` are both `readdirSync`-derived (`:61`, `:64`), and `describe.each(locales)` × `it.each(namespaces)` applies two assertions to `tournament.json` the moment `en/tournament.json` exists:
+  - **key parity** (`:272`) — every English key present in each locale (`:276`), and **no extra keys** in any locale (`:279`);
+  - **interpolation-placeholder parity** (`:282`) — every `{{name}}` set must match English exactly, per key, per locale, unless the key is listed in `KNOWN_PLACEHOLDER_GAPS`. Do **not** add a `tournament` entry to that allowlist: `:303` policies it against staleness, so an unnecessary exemption goes red on its own.
+  Discriminating for this phase: translate one English value with `{{code}}` into `pl/tournament.json` without the placeholder and the placeholder-parity case names the key and both placeholder sets.
+- **`FOUR_FORM_STEMS` namespace parameterization** *(new, revision 3 finding A)*. Change the constant from `readonly string[]` to `ReadonlyArray<{ ns: string; stem: string }>`, keep all 16 existing entries with `ns: "draft.json"`, and change `:201` from `load(locale, "draft.json")` to `load(locale, entry.ns)`, iterating entries rather than bare stems. **This is a pure refactor with zero behavioral change to the draft coverage** — same locales, same stems, same suffixes, same file. Verification that it is behavior-preserving: `keeps_all_plural_families_complete_in_every_locale` must still pass unchanged, and temporarily flipping one entry's `ns` to `"menu.json"` must make exactly that one entry's four assertions fail (positive reach-guard proving the new `entry.ns` is actually consulted rather than ignored). Do **not** touch `WORKSPACE_SHELL_KEYS` (`:69-135`, separately pinned to `draft.json` at `:168`) or `resolves_polish_one_few_many_and_other_without_fallback` (`:210-268`, whose hardcoded Polish assertions are draft-specific by design) — neither is in scope.
+- **If this phase authors any count-bearing tournament key** (e.g. `entrants`, `roundOf`), author all four suffixes in all 7 catalogs per S4 part 3, and append `{ ns: "tournament.json", stem: "<stem>" }` to the parameterized list. If it authors none, the refactor still lands here as the enabling infrastructure named by S4, and phases 4/5 append their own entries.
+- `tsc -b --noEmit` proves `react-i18next.d.ts` registration compiles (`t("tournament:…")` typing oracle wired).
+- Registration triple is consistent: `NAMESPACES` in `i18n/index.ts`, the `resources` map in `react-i18next.d.ts`, and the `ns` + `resources` lists in `test-setup.ts` all gain `tournament`.
+- **`DEFERRED(phase 4)` — `t()` routing.** Proof that every user-visible string in new tournament JSX resolves through this namespace rather than being inlined as raw English. No JSX exists in this phase. Discharged by the explicitly-labelled row in phase 4's verification plan *(linked, revision 3 note 1)*.
+- **`DEFERRED(phase 5)` — key-set completeness across the whole UI.** Proof that the authored key set is *complete* for every mounted surface, i.e. that no raw `tournament.…` key path reaches the DOM. This cannot land before phase 4, because the components that reveal missing keys do not exist, and cannot land *at* phase 4 either, because the pages do not. Discharged by the explicitly-labelled key-completeness row in phase 5's verification plan.
+- Interim structural verification for both deferrals: green tree, `resources.test.ts` **and** `localeParity.test.ts` parity/placeholder/encoding green, `tsc` green.
+
+**Explicit decision point for this phase (do not resolve silently).** `test-setup.ts` currently registers 7 namespaces while `NAMESPACES` holds 8 — `replay` is missing from `test-setup.ts`, pre-existing drift unrelated to this work. Do **not** add a "the two lists agree" assertion unless you also fix `replay`, and if you fix it, say so in the commit body as a separate, named drive-by. Adding `tournament` only, with no such assertion, is the default and is correct.
+
+**Deferral list.** Every consumer of the namespace → phases 4 and 5. The catalog is explicitly **not frozen** here (seam S4).
+
+---
+
+### Phase 4 — Presentation primitives: pure page-state module + five dumb components
+
+**Goal.** Land the arity-polymorphic, server-authoritative presentation layer: one pure logic module and five components that render a `TournamentView` from props and compute no game state. This is the phase where "the frontend is a display layer" is enforced in a single reviewable pass.
+
+**Scope-path hints.**
+```
+client/src/pages/tournamentPageState.ts
+client/src/components/tournament/TournamentListItem.tsx
+client/src/components/tournament/CreateTournamentForm.tsx
+client/src/components/tournament/TournamentStandingsTable.tsx
+client/src/components/tournament/PairingsList.tsx
+client/src/components/tournament/ReportResultDialog.tsx
+client/src/pages/__tests__/tournamentPageState.test.ts
+client/src/components/tournament/__tests__/TournamentStandingsTable.test.tsx
+client/src/components/tournament/__tests__/PairingsList.test.tsx
+client/src/components/tournament/__tests__/ReportResultDialog.test.tsx
+client/src/i18n/__tests__/localeParity.test.ts
+```
+(`localeParity.test.ts` is listed only so this phase may append `{ ns: "tournament.json", stem }` entries for count-bearing keys it discovers — see S4. It is a test file and is excluded from T2 counting; this phase's source scope-path count remains **6**. The 7 `tournament.json` catalogs this phase may also touch group as one path with their authored English source and are already counted under phase 3's mirror group.)
+
+**Verification plan.**
+- `tournamentPageState.ts` is pure and unit-tested: `outcomeLabelKey` exhaustive over all four outcome shapes (`Bye`, `Forfeit`, `Reported→Decisive`, `Reported→Draw`) with no `default` arm; `tiebreakColumns` exhaustive over both `Tiebreaks` arms; `isOrganizer`; `myPairing`. Hostile fixture — a `Multiplayer` tiebreak row fed to a head-to-head column set must not silently render blanks.
+- `TournamentStandingsTable`: renders rows in **server-given order**, never re-sorted, never re-ranked, never recomputed. Revert-failing assertion — feed a fixture whose `match_points` are deliberately non-monotonic in array order and assert the DOM order equals the array order. Dropped entrants stay **listed and marked**, not filtered.
+- `PairingsList`: one `it.each` over a bye (1 seat), head-to-head (2), a full Commander pod (4) and a short pod (3), each × all four outcome shapes, rendering without branching on arity.
+- `TournamentListItem`: renders `player_count` labelled as **active** entrants, not total. Hostile fixture — the probed payload where `summary.player_count` is 1 while `view.players.length` is 2; asserting "2 entrants" must fail.
+- `CreateTournamentForm`: submits whatever bracket+arity was chosen and does **not** client-side pre-reject `SingleElimination` + arity ≠ 2 — that rejection is the broker's authority. Positive reach-guard: assert the submit callback fired with the illegal combination.
+- `ReportResultDialog`: `game_wins` inputs appear only at arity 2 (pods are single-game per MSTR); at arity 4 the dialog submits `Decisive { winner, game_wins: {} }`.
+- **Discharges phase 3's `DEFERRED(phase 4)` — `t()` routing** *(relabelled, revision 3 note 1)*. Every user-visible string in these five components is routed through `t()` in the `tournament` namespace; no raw English literal survives in JSX. Because `test-setup.ts` registers the real English catalog, this is directly observable: render each component against its fixture and assert no rendered text node equals a raw `tournament.…` key path — a missing key surfaces as the key itself, and an un-routed string surfaces as English that appears in no catalog value. **Paired positive reach-guard:** assert at least one known catalog value *does* render, so a component that rendered nothing at all cannot satisfy the negative vacuously. Scope note: this row discharges the **`t()`-routing half only**. Key-set completeness across mounted pages remains `DEFERRED(phase 5)` and is discharged there — this phase mounts no page.
+- `DEFERRED(phase 5)`: nothing mounts these components — no route, no store subscription, no live socket. Interim structural verification: green `tsc -b --noEmit`, green `eslint`, and the fixture-driven component suites above, which are fully discriminating without a route.
+
+**Deferral list.** Mounting, routing, nav, store wiring, unmount races, live socket behavior → phase 5. Any `tournament.json` key this phase discovers it needs is added here, in all 7 catalogs, under the full S4 contract (key parity **+ placeholder parity + all four plural suffixes in all 7 catalogs for any count-bearing key**, with the stem appended to the parameterized `FOUR_FORM_STEMS`) — seam S4.
+
+---
+
+### Phase 5 — Pages, routing, navigation (terminal phase)
+
+**Goal.** Mount everything: two pages that own view state and subscribe through the store, two routes inside the existing `AppShell` layout route, and one primary nav destination. This is the phase where every deferred end-to-end claim comes due and the PR's acceptance criteria are fully satisfied.
+
+**Scope-path hints.**
+```
+client/src/pages/TournamentLandingPage.tsx
+client/src/pages/TournamentPage.tsx
+client/src/App.tsx
+client/src/components/chrome/navItems.tsx
+client/src/components/chrome/navIcons.tsx
+client/src/components/chrome/__tests__/navItems.test.ts
+client/src/pages/__tests__/TournamentLandingPage.test.tsx
+client/src/pages/__tests__/TournamentPage.test.tsx
+client/src/i18n/__tests__/localeParity.test.ts
+```
+Conditional, only if the tournament pages want the status banner: `client/src/components/chrome/AppShell.tsx` (its `showStatusBanner` hardcodes `pathname === "/" || pathname === "/multiplayer"`).
+(`localeParity.test.ts` is listed only so this phase may append `{ ns: "tournament.json", stem }` entries for count-bearing keys it discovers — see S4. Test file, excluded from T2 counting; this phase's source scope-path count remains **5**, +1 conditional.)
+
+**Verification plan.** These are the previously-deferred discriminating tests, now landable. Each row below names the phase whose deferral it discharges:
+
+- **Discharges phase 2's `DEFERRED(phase 5)` — unmount-during-in-flight-connect.** Mount a page, unmount it before `subscribeTournaments` resolves, and assert the detach ran and no listener remains. This is #4615's bug reproduced then proven fixed; the cleanup must copy the `LobbyView.tsx` idiom (`if (cancelled) { detach?.(); return; }`) exactly.
+- **Discharges phase 2's `DEFERRED(phase 5)` — organizer/player gating as rendered UI.** Controls appear only when the matching token is held for *that* code. Hostile fixture: credentials for tournament A, viewing tournament B → no organizer controls.
+- **Discharges phase 1's `DEFERRED(phase 5)` — `ToSubscribers`-only delivery** *(this row is the named fulfilment of phase 1's deferral, not an independent claim)*. With a **real, store-owned, subscribed** fake socket — mounted through the page, not hand-constructed in the test — invoke each of `startTournamentRound`, `reportMatchResult`, `dropFromTournament` and `endTournament`, and assert that rendered state updates **from the ambient subscription broadcast**, never from the RPC return value (the known benign race the draft documents). Paired positive reach-guard: assert the request frame actually went out on that same socket, so a page that silently no-ops cannot satisfy the "state came from the broadcast" assertion vacuously.
+- **Discharges phase 3's `DEFERRED(phase 5)` — key-set completeness across mounted pages.** Render both pages against fixtures and assert no raw key path (`tournament.…`) leaks to the DOM, which is what `test-setup.ts` registration makes observable. This is the page-level half of phase 3's deferral; the component-level `t()`-routing half was discharged in phase 4.
+- Server rejections surface as inline alerts through a translated template (`t("errors.serverRejected", { message })`), with the raw server message interpolated, not translated. **Because this key interpolates, all 7 `tournament.json` catalogs must carry `{{message}}` in that value or `localeParity.test.ts`'s placeholder-parity case (`:282`) goes red — see S4.**
+- Routes reachable; `activeNavKey` lights the tournament item for `/tournament` and `/tournament/:code` and not for unrelated paths.
+- `node scripts/check-protocol-version.mjs` exit 0 — final confirmation the version triple never moved.
+
+**Deferral list.** None — terminal phase. Every item deferred by phases 1–4 lands or is verified here.
+
+---
+
+## Seam notes
+
+**S1 — `client/src/adapter/types.ts` (4499 lines, high-collision shared file; phase 1).** Append only, as a `// ── Tournament ──` banner section after the existing lobby section. Never reorder or reformat existing exports. Re-read before editing if the file changed.
+
+**S2 — `PairingView` name collision (frozen in phase 1, propagates to 4 and 5).** `adapter/draft-adapter.ts` already exports `PairingView` with an incompatible shape, imported by `EliminationBracket.tsx`, `multiplayerDraftStore.ts`, `p2p-draft-host.ts`, `draftPodHostAdapter.ts` and three adapter tests. Phase 1 must pick a distinct name for the broker mirror — `TournamentPairingView` is the natural choice — and phases 4/5 must use it. Do not rename or touch the draft-side type; that is other, shipped work.
+
+**S3 — `SubscribeLobby` refcount is shared; the fix is phase 2's, but it is only *possible* because of a constraint on phase 1 (phase 2, with a binding constraint on phase 1).**
+
+`subscribeLobbyOver`'s returned detach sends `UnsubscribeLobby` unconditionally (`brokerClient.ts:656`, with the matching `SubscribeLobby` at `:650`), and the store fires it when `lobbySubscribers.size === 0`. Broker-side, `AddSubscriber`/`RemoveSubscriber` insert and remove *this connection's `tx`* from one set (`crates/lobby-broker/src/broker.rs:317-332` for the add, `:339-342` for the remove) — a single removal kills the subscription no matter how many `SubscribeLobby` frames preceded it. So the draft's "tournament subscribe sends `SubscribeLobby` but explicitly not `UnsubscribeLobby`" is a half-measure that leaks in the other direction: the last lobby subscriber leaving silently kills every live tournament subscription on the same socket.
+
+Phase 2 must introduce **one** `SubscribeLobby` refcount spanning both subscriber sets, with `UnsubscribeLobby` sent only when the combined count reaches zero. This is a required correction to the draft, not an optional refinement, and it carries its own discriminating tests (listed in phase 2).
+
+**Both directions are tested at phase 2's boundary, not one.** The detach direction (last lobby subscriber must not unsubscribe while a tournament subscriber lives) is the direction the draft got wrong. The attach direction is the direction a *unification* can get wrong: `SubscribeLobby` → `Outbound::AddSubscriber` is the only path into the delivery set, so a refcount that treats a tournament subscriber as "already covered" when no lobby subscriber exists produces a page that renders and never updates — a failure that, without phase 2's attach-side bullet, would first surface in phase 5 as a mysterious dead subscription. Its negative sibling (a *second* tournament subscriber must not re-send) is what proves the count is shared rather than per-subscriber.
+
+**Why this constrains phase 1.** Phase 2's scope is `multiplayerStore.ts` alone; phase 1's `tournamentClient.ts` is frozen by the time phase 2 runs. The natural thing for a stateless executor to do in phase 1 is mirror the established `subscribeLobbyOver` precedent and have `subscribeTournamentsOver` send `SubscribeLobby` on attach and `UnsubscribeLobby` on detach. If it does, the frames live outside the refcount the store owns, and phase 2 **cannot** unify them without editing a file that is not in its scope — the seam's own mandate becomes unenforceable at the boundary it is assigned to. Phase 1 therefore carries an explicit, tested constraint: `subscribeTournamentsOver` sends those frames **zero times** and handles inbound `TournamentListUpdate` / `TournamentUpdate` / `TournamentRemoved` only. It is guarded by phase 1's static source-text assertion plus a zero-`send` attach/detach test with a positive reach-guard. Treat that assertion as load-bearing for S3, not as style policing: deleting it re-opens this seam.
+
+**The guard must not forbid the explanation.** S3 positively wants `tournamentClient.ts` to carry a doc comment saying why these frames are deliberately absent and where they live instead — `brokerClient.ts:595` sets the precedent by naming `UnsubscribeLobby` inside exactly such a comment. That is why phase 1's assertion is scoped to `send(` call arguments rather than to the raw file text: a whole-file `toContain` check would make the seam's own documentation illegal. See phase 1's verification plan for the two acceptable implementations and the required positive control.
+
+**S4 — locale catalogs are shared across phases 3, 4 and 5, and are gated by *two* auto-discovering tests plus one now-parameterized pinned test.**
+
+Phase 3 authors the initial key set but does **not** freeze it: phases 4 and 5 will each discover keys they need. Every key added in a later phase must land in all 7 `tournament.json` files (and `menu.json` for nav) in that same commit. Treat these 14 files as a shared surface across three phases.
+
+The contract every such addition must satisfy is **three-part**, not just flat key parity:
+
+1. **Flat key parity** — `client/src/i18n/resources.test.ts` (auto-discovering) *and* `localeParity.test.ts:272` (auto-discovering). The latter is exact **in both directions**: `:276` rejects a key present in English and missing from a locale; `:279` rejects a key present in a locale and absent from English. A key added to `en/` and forgotten in one mirror goes red in both tests.
+2. **Interpolation-placeholder parity** — `localeParity.test.ts:282`, auto-discovering over `readdirSync`'d locales × namespaces. Every `{{name}}` in a translated value must match the English value's placeholder set exactly. This binds phase 5's `t("errors.serverRejected", { message })` and every count-bearing or code-bearing string phases 4 and 5 add. `KNOWN_PLACEHOLDER_GAPS` (`:32`) is an allowlist — **do not add tournament entries to it**; `:303` fails on any entry that is no longer needed, so an unnecessary exemption is self-reporting.
+3. **Four-form plural families — authored in all 7 catalogs including English, and enforced through a namespace-parameterized `FOUR_FORM_STEMS`.**
+
+   **This is not a "Polish only" requirement.** *(Corrected, revision 3 finding B — this is the gap most likely to actually bite an implementer, so read it before authoring any count-bearing key.)* Polish is the locale whose grammar *needs* four forms (`_one` / `_few` / `_many` / `_other`; `localeParity.test.ts:266-268` pins i18next's Polish suffix resolution as `1→_one`, `2→_few`, `5→_many`, `12→_many`, `1.5→_other`). But i18next resolves plurals by looking up *suffixed keys*, and part 1's key parity is exact in **both** directions. So the moment English authors `entrants_one` / `entrants_few` / `entrants_many` / `entrants_other`, **every one of the 7 catalogs — English included — must carry all four suffixed keys**, even though English, French, German, Spanish, Italian and Portuguese only grammatically distinguish two.
+
+   This is the existing house convention, not an invention. `en/draft.json:219-222` carries `workspace.count.deck_{one,few,many,other}` with `_few`, `_many` and `_other` all reading "Deck ({{count}} cards)"; `fr/draft.json:220-221` mirrors it the same way. Redundant-looking duplicate values in the two-form locales are **correct and required**.
+
+   **Author all four suffixes in all 7 files, in the same commit, always.** The failure mode this exists to prevent: authoring only `_one`/`_other` in English while Polish carries all four. That goes red as an *extra-key* violation on `pl` (`:279`), and the tempting quick "fix" — deleting Polish's `_few`/`_many` — turns a red test into silently broken Polish grammar. The fix is always to add the missing forms to English and the other five locales, never to remove them from Polish.
+
+   **Enforcement mechanism — the v2 charter's instruction here was wrong and is replaced.** v2 said a phase wanting four-form enforcement for a tournament stem "adds that stem to `FOUR_FORM_STEMS`." Verified against the file: `FOUR_FORM_STEMS` (`:137-154`) has **exactly one use site**, `:202`, inside a loop whose `target` is `load(locale, "draft.json")` (`:201`) — hardcoded, for every locale, independent of which stem is being checked. Appending `"entrants"` would make the test look for `entrants_one` … `entrants_other` **inside `draft.json`**, where they can never be. That is 7 locales (`[SOURCE, ...locales]`, `:200`) × 4 suffixes = **28 guaranteed failures**, not zero. Do not follow the v2 instruction.
+
+   **Remediation chosen: (a), parameterize the stem list by namespace.** Phase 3 changes `FOUR_FORM_STEMS` from `readonly string[]` to `ReadonlyArray<{ ns: string; stem: string }>`, keeps all 16 existing entries with `ns: "draft.json"`, and changes `:201` to `load(locale, entry.ns)`. Phases 3, 4 and 5 then append `{ ns: "tournament.json", stem: "<stem>" }` for each count-bearing tournament key they author.
+
+   **Reasoning (finding A asked for this explicitly).** The alternative — declaring four forms a convention-only requirement with no mechanical gate — leaves one real hole that part 1 does *not* close. Key parity is English-driven: it forces every locale to match English, but nothing forces **English itself** to carry `_few`/`_many`. An author who writes only `entrants_one`/`entrants_other` in `en/tournament.json` and dutifully mirrors exactly those two into `pl/tournament.json` gets a fully green tree and broken Polish plurals in production — precisely the failure this seam exists to prevent, and precisely the one a convention-only rule cannot catch. `FOUR_FORM_STEMS` closes it because its loop runs over `[SOURCE, ...locales]`, pinning English too.
+
+   Against that, the risk of route (a) is low and bounded. All 16 existing entries keep `ns: "draft.json"`, so the loop performs identical loads over identical stems with identical suffixes — the draft assertion is bit-identical before and after, and cannot be destabilized by a change that alters none of its inputs. The refactor touches four lines and no assertion semantics. Neither of the file's other draft-pinned surfaces is touched: `WORKSPACE_SHELL_KEYS` (`:69-135`, pinned at `:168`) is a different constant with a different purpose, and `resolves_polish_one_few_many_and_other_without_fallback` (`:210-268`) asserts literal Polish strings from `pl/draft.json` and is draft-specific by design. Phase 3 carries a positive reach-guard for the refactor itself (flip one entry's `ns` and exactly that entry's four assertions must fail), so a parameterization that silently ignores `entry.ns` cannot pass.
+
+   **Scope-path consequence, stated explicitly.** `client/src/i18n/__tests__/localeParity.test.ts` is added to the scope-path hints of phases 3, 4 and 5 — the executor must know it is allowed to touch it. It is a **test file**, which the T2 counting rule excludes outright, so **no phase's unit count or source scope-path count changes and no phase's fit verdict moves**: phase 3 stays at 5, phase 4 at 6, phase 5 at 5 (+1 conditional). The phase-fit table below is restated unchanged.
+
+Neither `resources.test.ts` nor `localeParity.test.ts` needs editing for parts 1 and 2 in any phase; part 3 is the sole reason any phase touches `localeParity.test.ts`.
+
+**S5 — `test-setup.ts` pre-existing drift.** See the explicit decision point in phase 3. Do not silently repair `replay`.
+
+**S6 — `navItems.test.ts` will go red the moment a nav item is added (phase 5).** It asserts `NAV_ITEMS.map(n => n.key)` equals an exact five-element array, under a test named "exposes exactly the five primary destinations". Phase 5 must update both the array and the test name in the same commit. This is expected, not a regression.
+
+**S7 — `App.tsx`, `navItems.tsx`, `navIcons.tsx` are shared chrome** other agents touch frequently. Phase 5 edits must be surgical additions to the existing data tables and route list; keep the `DevStrict` wrapper convention and add the two routes inside the existing `<AppShell>` layout route.
+
+**S8 — protocol version is pinned and must not move.** `LOBBY_PROTOCOL_VERSION = 4` in `ws-adapter.ts` already matches `protocol.rs` and the pin in `check-protocol-version.mjs`. Every phase re-runs `node scripts/check-protocol-version.mjs` and requires exit 0. Changing it would break the gate for no reason.
+
+**S9 — verification environment (applies to every phase).** Measured on this worktree: `client/node_modules` is **absent**, and Tilt does not watch this worktree (`tilt get uiresource clippy` fails) — `./scripts/tilt-wait.sh` here returns exit 3 ("cannot answer"), which must never be reported as a build failure. Each phase should run `pnpm install --frozen-lockfile` once in `client/`, then verify directly with `pnpm --dir client run type-check` (which chains `protocol:check`), `pnpm --dir client run lint`, and `pnpm --dir client exec vitest run <paths>`. No phase changes Rust, so `cargo fmt`/`clippy`/`test-engine` are N/A throughout — and no phase should take the cargo target lock at all.
+
+---
+
+## Recursive phase-fit check
+
+Adjudicating T1 (units ≥ 2) ∧ T2 (source scope-paths ≥ 13) against each phase individually, using the same counting rule (**test files excluded outright**; translation mirrors grouped with their authored source):
+
+| Phase | Units | Source scope-paths | T1 | T2 | Conjunction |
+|---|---|---|---|---|---|
+| 1 — Wire layer | 3 (mirrors; `requestOver` + 7 helpers; `subscribeTournamentsOver`) | 2 | fires | no (2) | **does not fire** |
+| 2 — Store integration | 4 (credentials; 7 actions; unified refcounted subscription; abort wiring) | 1 | fires | no (1) | **does not fire** |
+| 3 — i18n namespace | 2 (`tournament` ns; `menu` nav key) | 5 | fires | no (5) | **does not fire** |
+| 4 — Presentation primitives | 6 (page-state module; 5 components) | 6 | fires | no (6) | **does not fire** |
+| 5 — Pages, routing, nav | 3 (landing page; detail page; routing + nav) | 5 (+1 conditional `AppShell.tsx`) | fires | no (5–6) | **does not fire** |
+
+No phase trips the conjunction; the charter is stable and needs no further decomposition. Charter totals: **18 units, 19 source scope-paths**.
+
+**Footnote on phase 3's row (revision 3 note 4).** Phase 3's `5` is a *grouped* count: 3 authored modules + the `tournament.json` mirror group + the `menu.json` mirror group. Ungrouped it would be 3 + 14 = **17**, which is ≥ 13 and would fire T2. The grouping rule ("committed generated artifacts and translation mirrors group with their authored source as one path") is what makes it 5, and it is the same rule the orchestrator applied in its own top-level adjudication of this task. Stated here so a future re-adjudicator does not have to re-derive it or mistake the 17-vs-5 gap for a counting error.
+
+**Revision-3 re-check.** Both blocking fixes and all four notes are zero-source-scope-path changes and the table above is unchanged:
+- **Finding A** adds `client/src/i18n/__tests__/localeParity.test.ts` to three phases' scope-path hints. It is a **test file**, excluded from T2 counting, so phase 3 stays at 5, phase 4 at 6, phase 5 at 5(+1). No unit count changes either: the parameterization is infrastructure inside phase 3's existing `tournament` namespace unit, not a new coherent mechanic. **No phase re-fires.**
+- **Finding B** is a prose correction to S4 part 3 plus an authoring rule; it changes the *content* of `tournament.json` (four suffixes rather than two for count-bearing keys) but not the *set of files*, which was already the 7-file mirror group.
+- **Note 1** is a deferral relabel plus a relabelled row in phase 4's existing plan. **Note 2** adds two assertions inside phase 2's already-listed `multiplayerStore.tournament.test.ts`. **Note 3** re-scopes an assertion inside phase 1's already-listed `tournamentClient.test.ts`. **Note 4** is one explanatory sentence.
+
+Dependency edges, all satisfied by the linear order: 1→2 (helpers need a socket owner, **and phase 1's zero-frame constraint is what makes phase 2's unified refcount reachable within its own scope**), 1→4 (components render the mirrors), 1→5 (phase 1's `ToSubscribers` deferral discharges there), 3→4 (`t()` type-checks only after registration, **and phase 3's `FOUR_FORM_STEMS` parameterization is what lets phase 4 register a count-bearing stem at all**), 3→5 (same, plus phase 3's key-completeness deferral discharges there), 2→5 and 4→5 (pages mount components and call store actions). Phase 3 has no dependency on 1 or 2 and could equivalently be ordered first; it is placed at position 3 so the unused-namespace window is as short as possible, immediately preceding its first consumer.
+
+**Feasibility: confirmed.** Every phase boundary leaves a compiling tree with all existing suites green, and every phase carries at least one discriminating test that is not deferred.

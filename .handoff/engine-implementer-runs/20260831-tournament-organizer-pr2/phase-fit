@@ -1,0 +1,132 @@
+# Phase-fit record — run 20260831-tournament-organizer-pr2
+
+## Entry 1 — initial adjudication (pre-existing review-clean plan, not a fresh draft)
+
+Plan: C:\Users\jamesr\AppData\Local\Temp\claude\C--git-phase\244d0f8b-964a-4a68-adaf-90ee506a441f\scratchpad\pr2_plan_draft.md
+Sizing section present (10 units, produced by the planner and independently
+re-verified against real current source during this session's own
+/review-engine-plan round -- two spot corrections applied directly, no
+design changes).
+
+Sizing values used:
+- Unit count: 10 (protocol version bump; wire view types; LobbyClientMessage/
+  LobbyServerMessage new variants; ClientMessage/ServerMessage mirror
+  variants; Broker/ConnState new fields; Broker::handle dispatch arms;
+  Broker::reap_expired widening; server-core<->lobby_broker conversion arms;
+  native dispatch/reaper fan-out wiring; SubscribeLobby's extended initial
+  push)
+- Expected scope-path count: 4 (crates/lobby-broker/src/protocol.rs,
+  crates/lobby-broker/src/broker.rs, crates/server-core/src/protocol.rs,
+  crates/phase-server/src/main.rs) -- no test fixtures, no generated
+  pipeline data, no directory expansion needed.
+
+Trigger measurement:
+- T1 (unit count >= 2): 10 >= 2 -> TRUE
+- T2 (scope-path count >= 13): 4 >= 13 -> FALSE
+- Gate fires only on T1 AND T2 -> FALSE AND-conjunction -> gate does NOT fire.
+- T3 not applicable (no dependency seam requires a split; T3 is a
+  seam-selection rule contingent on T1^T2 firing).
+
+Verdict: SINGLE-PHASE. Proceed with Steps 3-7 unphased against BASE_SHA.
+
+BASE_SHA = b0caa0ade99c85e870b6a64e78dda49f437baedd (origin/main, freshly
+fetched; confirmed zero diff against the plan's read commit
+222812080e9aaf7643c7829a501ab12c91e135ae for every file this plan touches).
+
+## Entry 2 — re-adjudication after STOP-AND-RETURN (v1 plan) and plan revision (v2)
+
+v1 plan's implementation dispatch produced a STOP-AND-RETURN: five real,
+independently-verified blockers proved the "four files, no more" scope
+claim false (three exhaustive matches lacking wildcards forcing new arms in
+validation.rs/client_message_wire_guard.rs/broker-wasm's mutates_lobby, a
+private TournamentManager field with no iteration accessor, and a
+version-sync script/TS-constant pair the version bump must keep green).
+No code was ever written or committed for v1 -- worktree confirmed clean
+at START_SHA throughout.
+
+Revised plan (v2) folds all five in as required scope. Independently
+re-verified every new claim against real source, including a full-repo
+grep sweep for any OTHER exhaustive match over LobbyClientMessage the
+revision might have missed (found none beyond the three already known --
+inbound_guard.rs's guard_inbound has a wildcard and needs no change).
+
+Sizing values used (v2):
+- Unit count: 15 (10 original + 5 new: TournamentManager::iter() accessor,
+  validation.rs bounds checking, client_message_wire_guard.rs 3-match
+  extension, mutates_lobby classification, protocol-version-sync
+  script+TS-constant)
+- Expected scope-path count: 10 (lobby-broker/src/{protocol,broker,
+  tournament,validation}.rs, server-core/src/{protocol,
+  client_message_wire_guard}.rs, phase-server/src/main.rs,
+  lobby-worker/broker-wasm/src/lib.rs, scripts/check-protocol-version.mjs,
+  client/src/adapter/ws-adapter.ts)
+
+Trigger measurement:
+- T1 (unit count >= 2): 15 >= 2 -> TRUE
+- T2 (scope-path count >= 13): 10 >= 13 -> FALSE
+- Gate fires only on T1 AND T2 -> FALSE AND-conjunction -> gate does NOT fire.
+
+Verdict: SINGLE-PHASE, unchanged. Proceed with Steps 3-7 unphased against
+BASE_SHA b0caa0ade99c85e870b6a64e78dda49f437baedd.
+
+## Entry 3 — final acceptance
+
+Single-phase run accepted.
+BASE_SHA:      b0caa0ade99c85e870b6a64e78dda49f437baedd
+CANDIDATE_SHA: 31ab297dce4810460954c4713fb8ddac93857b98
+Frozen scope (10 files, expanded from an initial 4-file plan after a
+legitimate STOP-AND-RETURN mid-pipeline -- see Entry 2):
+  client/src/adapter/ws-adapter.ts, crates/lobby-broker/src/{broker,
+  protocol,tournament,validation}.rs, crates/phase-server/src/main.rs,
+  crates/server-core/src/{client_message_wire_guard,protocol}.rs,
+  lobby-worker/broker-wasm/src/lib.rs, scripts/check-protocol-version.mjs
+Commits in range: 31ab297dc (single implementation commit -- no fix rounds
+needed; review-impl round 1 returned clean)
+Implementation-review rounds: 1 (zero findings, explicit LGTM)
+Completion gate at CANDIDATE_SHA: build pass, 720 passed / 0 failed across
+lobby-broker+server-core+phase-server, clippy clean, rustfmt clean,
+protocol-version-sync script exit 0.
+rev-parse HEAD == CANDIDATE_SHA: confirmed.
+No abandoned candidates (the v1-plan STOP-AND-RETURN made zero edits before
+stopping, so nothing was ever committed against it).
+Not pushed, no PR opened -- user instructed to stop short of push/PR
+pending explicit go-ahead.
+
+## Entry 4 — merged upstream
+
+PR phase-rs/phase#8258 opened from myfork/feat/tournament-organizer-pr2-wiring,
+went through 3 real maintainer (matthewevans) review rounds beyond this
+session's own internal pipeline, plus independently-confirmed findings from
+CodeRabbit and Superagent Security Scan on the same heads:
+  - Round A (CHANGES_REQUESTED): dropped-player token retained full report/
+    drop authority (authorize_player never checked TournamentPlayer::dropped);
+    no capacity cap on tournament creation (unlike MAX_LOBBY_ENTRIES for lobby
+    games); frontend tests broke from a correct architectural decision
+    (LOBBY_PROTOCOL_VERSION/MIN_SUPPORTED_SERVER_LOBBY_PROTOCOL decoupling)
+    -- fixed in db6a08aa6, pushed, replied.
+  - Maintainer merge-conflict resolution (not a review round): another PR
+    (#8225) independently claimed LOBBY_PROTOCOL_VERSION=3; matthewevans
+    rebased this branch himself, reassigning this PR's variants to v4 --
+    9bb6bc971, fast-forwarded into the local worktree.
+  - Round B (CHANGES_REQUESTED, on top of the merge): WasmBroker::is_empty()
+    only checked the lobby registry, so a tournament-only Durable Object
+    would stop rescheduling its reaper alarm before the tournament's own
+    expiry ever fired -- exactly the bug the ORIGINAL merged design's own
+    PLAN.md had predicted and said belonged in this PR, not PR3. Fixed in
+    two internal iterations: first in broker-wasm's own file (db6a08aa6's
+    successor), then moved down to Broker::is_empty() in broker.rs after
+    discovering the first iteration's regression test would never actually
+    run in CI (broker-wasm is workspace-excluded; its CI job runs JS tests
+    only) -- final fix c265ffa1d, pushed, replied with the CI-gap disclosure.
+  - Round C: APPROVED for merge queue at c265ffa1d919ae3e6fd9e2ce8a109baf38331766.
+All required CI checks green. PR MERGED 2026-09-02T00:48:00Z.
+
+Final merged head: c265ffa1d919ae3e6fd9e2ce8a109baf38331766
+(commits on top of BASE_SHA b0caa0ade99c85e870b6a64e78dda49f437baedd:
+ 31ab297dc, db6a08aa6, 9bb6bc971 [maintainer merge commit], c265ffa1d)
+
+Note: a real, disclosed, unresolved gap remains post-merge -- lobby-worker/
+broker-wasm's own Rust #[cfg(test)] module (2 mutates_lobby tests) never
+executes in CI (crate is workspace-excluded; its CI job runs only pnpm/JS
+tests). This PR did not attempt to fix the CI workflow itself; flagged to
+the maintainer as an out-of-scope follow-up candidate.

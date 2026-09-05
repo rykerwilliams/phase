@@ -1,0 +1,60 @@
+# Phase-fit record — run 20260902-tournament-organizer-pr3
+
+## Entry 1 — initial adjudication (pre-existing review-clean plan, not a fresh draft)
+
+Plan: C:\Users\jamesr\AppData\Local\Temp\claude\C--git-phase\244d0f8b-964a-4a68-adaf-90ee506a441f\scratchpad\pr3_plan_draft.md
+Produced by a forked agent this session, then independently re-verified by the
+orchestrator directly against real origin/main source (every "zero code
+changes needed" claim spot-checked: WasmBroker::handle's genericity,
+dispatchOutbound's variant-agnostic switch, ConnAttachment's/DEFAULT_CONN's
+current 4-field state, ConnState's real PR2-final shape). Treated as
+pre-existing review-clean, no /review-engine-plan round dispatched separately
+since the orchestrator's own direct verification already covered the
+plan's load-bearing claims.
+
+Sizing values used:
+- Unit count: 2 (ConnAttachment interface extension; DEFAULT_CONN + stale
+  comment correction)
+- Expected scope-path count: 2 (lobby-worker/src/hello-gate.ts,
+  lobby-worker/src/lobby-do.ts) -- a small test addition is explicitly
+  excluded from the count per the phase-fit counting rule (test fixtures
+  excluded outright).
+
+Trigger measurement:
+- T1 (unit count >= 2): 2 >= 2 -> TRUE
+- T2 (scope-path count >= 13): 2 >= 13 -> FALSE
+- Gate fires only on T1 AND T2 -> FALSE AND-conjunction -> gate does NOT fire.
+
+Verdict: SINGLE-PHASE. Proceed with Steps 3-7 unphased against BASE_SHA.
+
+BASE_SHA = bf9336ee4eafb9c076e9c6094384f15478fe5f15 (origin/main, freshly
+fetched, unchanged from the plan's own read commit).
+
+Notably: this PR's real scope is far smaller than PLAN.md's original PR3
+description, because two of that description's three items (mutates_lobby,
+is_empty()) were already forced into PR2 by real compile-time/correctness
+constraints discovered during that PR's own implementation.
+
+## Entry 2 — final acceptance
+
+Single-phase run accepted.
+BASE_SHA:      bf9336ee4eafb9c076e9c6094384f15478fe5f15
+CANDIDATE_SHA: 31a9486bdbf588e7e6a5414e81f16159f7e8ad02
+Frozen scope: lobby-worker/src/hello-gate.ts, lobby-worker/src/lobby-do.ts,
+              lobby-worker/test/conn-attachment.test.mjs (new)
+Commits: 31a9486bd (single implementation commit, no fix rounds needed)
+Implementation-review rounds: 1 (zero findings, explicit LGTM)
+Completion gate at CANDIDATE_SHA: npm ci pass, pnpm test 62 passed / 0 failed
+(3 new, confirmed revert-failing), typecheck introduces zero new errors
+(baseline-compared against the one pre-existing, unrelated tsc error from a
+gitignored wasm build artifact never built in CI).
+rev-parse HEAD == CANDIDATE_SHA: confirmed.
+Zero Rust files touched. No abandoned candidates.
+Not pushed, no PR opened -- user instructed to stop short of push/PR pending
+explicit go-ahead.
+
+Notable: this PR's real scope (2 TS files) was far smaller than the merged
+design's original PR3 description, because two of that description's three
+items were already forced into PR2, and the third's "alarm handler
+widening" concern was already satisfied by pre-existing generic code once
+actually read rather than assumed from the design doc's prose.

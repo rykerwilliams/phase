@@ -1196,7 +1196,8 @@ fn reject_if_disabled(msg: &ClientMessage, mode: ServerMode) -> Option<&'static 
         | ClientMessage::StartTournamentRound { .. }
         | ClientMessage::ReportMatchResult { .. }
         | ClientMessage::DropFromTournament { .. }
-        | ClientMessage::EndTournament { .. } => None,
+        | ClientMessage::EndTournament { .. }
+        | ClientMessage::RenewTournamentCredential { .. } => None,
 
         // Draft messages — Full-only (draft sessions are server-hosted).
         ClientMessage::CreateDraftWithSettings { .. }
@@ -1397,7 +1398,12 @@ fn full_socket_authority(message: &ClientMessage) -> FullSocketAuthority {
         | ClientMessage::StartTournamentRound { .. }
         | ClientMessage::ReportMatchResult { .. }
         | ClientMessage::DropFromTournament { .. }
-        | ClientMessage::EndTournament { .. } => FullSocketAuthority::Independent,
+        | ClientMessage::EndTournament { .. }
+        // Rotation is authorized by the presented credential exactly as the
+        // four gated actions are, so it takes the same `Independent` seat
+        // authority: a holder must be able to rotate from a fresh socket, which
+        // is the whole point of a credential that is not socket-bound.
+        | ClientMessage::RenewTournamentCredential { .. } => FullSocketAuthority::Independent,
 
         ClientMessage::CreateGame { .. }
         | ClientMessage::JoinGame { .. }
@@ -2735,7 +2741,7 @@ mod lifecycle_tests {
             LobbyClientMessage::CreateTournament {
                 name: "Friday Night".into(),
                 arity: MatchArity::HEAD_TO_HEAD,
-                scoring: ScoringPolicy::default(),
+                scoring: Some(ScoringPolicy::default()),
                 bracket: BracketShape::Swiss,
                 total_rounds: None,
             },
@@ -3668,19 +3674,23 @@ fn to_server_message(m: lobby_broker::LobbyServerMessage) -> ServerMessage {
         L::TournamentCreated {
             code,
             organizer_token,
+            expires_at_ms,
             view,
         } => ServerMessage::TournamentCreated {
             code,
             organizer_token,
+            expires_at_ms,
             view,
         },
         L::TournamentJoined {
             code,
             player_token,
+            expires_at_ms,
             view,
         } => ServerMessage::TournamentJoined {
             code,
             player_token,
+            expires_at_ms,
             view,
         },
         L::TournamentUpdate { code, view } => ServerMessage::TournamentUpdate { code, view },
@@ -3706,6 +3716,19 @@ fn to_server_message(m: lobby_broker::LobbyServerMessage) -> ServerMessage {
         } => ServerMessage::TournamentActionRejected {
             request_id,
             message,
+        },
+        // `role` is the same re-exported `TournamentRole` on both enums, so
+        // this stays a pure re-tag like every arm above it.
+        L::TournamentCredentialRenewed {
+            code,
+            role,
+            token,
+            expires_at_ms,
+        } => ServerMessage::TournamentCredentialRenewed {
+            code,
+            role,
+            token,
+            expires_at_ms,
         },
     }
 }
@@ -3888,6 +3911,13 @@ fn to_lobby_client_message(msg: &ClientMessage) -> Option<lobby_broker::LobbyCli
             organizer_token: organizer_token.clone(),
             request_id: *request_id,
         },
+        ClientMessage::RenewTournamentCredential { code, role, token } => {
+            L::RenewTournamentCredential {
+                code: code.clone(),
+                role: *role,
+                token: token.clone(),
+            }
+        }
         _ => return None,
     })
 }
@@ -5350,7 +5380,8 @@ fn operation_failed_message(msg: &ClientMessage, message: String) -> Option<Serv
         | ClientMessage::StartTournamentRound { .. }
         | ClientMessage::ReportMatchResult { .. }
         | ClientMessage::DropFromTournament { .. }
-        | ClientMessage::EndTournament { .. } => None,
+        | ClientMessage::EndTournament { .. }
+        | ClientMessage::RenewTournamentCredential { .. } => None,
     }
 }
 
@@ -9804,7 +9835,8 @@ async fn handle_client_message(
         | ClientMessage::StartTournamentRound { .. }
         | ClientMessage::ReportMatchResult { .. }
         | ClientMessage::DropFromTournament { .. }
-        | ClientMessage::EndTournament { .. } => {
+        | ClientMessage::EndTournament { .. }
+        | ClientMessage::RenewTournamentCredential { .. } => {
             dispatch_broker(
                 &client_msg,
                 lobby,
@@ -12884,15 +12916,17 @@ mod mode_gate_tests {
 
     use server_core::protocol::{
         BracketShape, MatchArity, PairingOutcome, PairingView, PlayerSummary, PodOutcome,
-        ScoringPolicy, TournamentRequestId, TournamentStatus, TournamentSummary, TournamentView,
+        ReportGate, ScoringPolicy, TournamentAction, TournamentRequestId, TournamentRole,
+        TournamentStatus, TournamentSummary, TournamentView,
     };
+    use std::collections::BTreeSet;
 
     fn tournament_client_frames() -> Vec<ClientMessage> {
         vec![
             ClientMessage::CreateTournament {
                 name: "Friday Night".into(),
                 arity: MatchArity::COMMANDER_POD,
-                scoring: ScoringPolicy::default_for_arity(MatchArity::COMMANDER_POD),
+                scoring: Some(ScoringPolicy::default_for_arity(MatchArity::COMMANDER_POD)),
                 bracket: BracketShape::Swiss,
                 total_rounds: Some(4),
             },
@@ -12941,6 +12975,11 @@ mod mode_gate_tests {
                 organizer_token: "org-tok".into(),
                 request_id: None,
             },
+            ClientMessage::RenewTournamentCredential {
+                code: "TOUR01".into(),
+                role: TournamentRole::Organizer,
+                token: "org-tok".into(),
+            },
         ]
     }
 
@@ -12966,6 +13005,14 @@ mod mode_gate_tests {
                 current_round: 1,
                 total_rounds: 3,
                 created_at: 1_000,
+                scoring: ScoringPolicy::default_for_arity(MatchArity::HEAD_TO_HEAD),
+                // A NON-EMPTY set: an empty one would round-trip through a
+                // projection that dropped the field entirely.
+                open_actions: BTreeSet::from([
+                    TournamentAction::StartRound,
+                    TournamentAction::EndTournament,
+                    TournamentAction::Drop,
+                ]),
             },
             players: vec![alice.clone(), bob.clone()],
             // Every `PairingOutcome` shape, so the round-trip cannot pass by
@@ -12976,6 +13023,7 @@ mod mode_gate_tests {
                     round: 1,
                     players: vec![alice.clone()],
                     outcome: Some(PairingOutcome::Bye),
+                    report_gate: ReportGate::Bye,
                 },
                 PairingView {
                     id: 1,
@@ -12984,6 +13032,7 @@ mod mode_gate_tests {
                     outcome: Some(PairingOutcome::Forfeit {
                         winner: "key-a".into(),
                     }),
+                    report_gate: ReportGate::Forfeit,
                 },
                 PairingView {
                     id: 2,
@@ -12995,18 +13044,21 @@ mod mode_gate_tests {
                             .into_iter()
                             .collect(),
                     })),
+                    report_gate: ReportGate::Open,
                 },
                 PairingView {
                     id: 3,
                     round: 1,
                     players: vec![alice.clone(), bob.clone()],
                     outcome: Some(PairingOutcome::Reported(PodOutcome::Draw)),
+                    report_gate: ReportGate::Open,
                 },
                 PairingView {
                     id: 4,
                     round: 2,
                     players: vec![alice, bob],
                     outcome: None,
+                    report_gate: ReportGate::Open,
                 },
             ],
             standings: Vec::new(),
@@ -13022,7 +13074,7 @@ mod mode_gate_tests {
     #[test]
     fn tournament_variants_survive_the_canonical_lobby_roundtrip() {
         let frames = tournament_client_frames();
-        assert_eq!(frames.len(), 7, "every new client variant is covered");
+        assert_eq!(frames.len(), 8, "every new client variant is covered");
 
         for msg in &frames {
             let projected = to_lobby_client_message(msg).unwrap_or_else(|| {
@@ -13052,11 +13104,13 @@ mod mode_gate_tests {
             lobby_broker::LobbyServerMessage::TournamentCreated {
                 code: "TOUR01".into(),
                 organizer_token: "org-tok".into(),
+                expires_at_ms: 1_700_000_000_000,
                 view: view.clone(),
             },
             lobby_broker::LobbyServerMessage::TournamentJoined {
                 code: "TOUR01".into(),
                 player_token: "player-tok".into(),
+                expires_at_ms: 1_700_000_000_000,
                 view: view.clone(),
             },
             lobby_broker::LobbyServerMessage::TournamentUpdate {
@@ -13080,8 +13134,14 @@ mod mode_gate_tests {
                 request_id: TournamentRequestId(7),
                 message: "not the organizer".into(),
             },
+            lobby_broker::LobbyServerMessage::TournamentCredentialRenewed {
+                code: "TOUR01".into(),
+                role: TournamentRole::Player,
+                token: "rotated-tok".into(),
+                expires_at_ms: 1_700_000_000_000,
+            },
         ];
-        assert_eq!(messages.len(), 7, "every new server variant is covered");
+        assert_eq!(messages.len(), 8, "every new server variant is covered");
 
         for msg in messages {
             let expected = serde_json::to_string(&msg).expect("lobby form serializes");
@@ -13736,7 +13796,7 @@ mod handshake_tests {
             LobbyClientMessage::CreateTournament {
                 name: "Friday Night".into(),
                 arity: MatchArity::HEAD_TO_HEAD,
-                scoring: ScoringPolicy::default(),
+                scoring: Some(ScoringPolicy::default()),
                 bracket: BracketShape::Swiss,
                 total_rounds: None,
             },

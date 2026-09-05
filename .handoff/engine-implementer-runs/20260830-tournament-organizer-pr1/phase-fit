@@ -1,0 +1,81 @@
+# Phase-fit record — run 20260830-tournament-organizer-pr1
+
+## Entry 1 — initial adjudication (pre-existing review-clean plan, not a fresh draft)
+
+Plan: C:\Users\jamesr\AppData\Local\Temp\claude\C--git-phase\244d0f8b-964a-4a68-adaf-90ee506a441f\scratchpad\pr1_plan_draft.md
+Sizing section present (11 units, added/corrected during this session's own /review-engine-plan round).
+
+Sizing values used:
+- Unit count: 11 (MatchArity, ScoringPolicy, TournamentStatus, PairingId/TournamentPairing/PairingOutcome/PodOutcome,
+  TournamentPlayer/TournamentMeta/TournamentManager, generate_pairings, drop_player, Standings/TiebreakOrder,
+  validate_match_result, report_result, check_expired)
+- Expected scope-path count: 2 (crates/lobby-broker/src/tournament.rs [new file]; crates/lobby-broker/src/lib.rs
+  [one-line mod/pub-use addition]) — no test fixtures, no generated pipeline data, no directory expansion needed.
+
+Trigger measurement:
+- T1 (unit count >= 2): 11 >= 2 -> TRUE
+- T2 (scope-path count >= 13): 2 >= 13 -> FALSE
+- Gate fires only on T1 AND T2 -> FALSE AND-conjunction -> gate does NOT fire.
+- T3 not applicable (no dependency seam requires a split; T3 is a seam-selection rule contingent on T1^T2 firing).
+
+Verdict: SINGLE-PHASE. Proceed with Steps 3-7 unphased against BASE_SHA.
+
+## Entry 2 — final acceptance
+
+Single-phase run accepted.
+BASE_SHA:      18afce1f242046f02fbe1554c29d569dfc0d0dcb
+CANDIDATE_SHA: 4b180893098b419212c59b1f5c5fe2ddf3c834a8
+Frozen scope:  crates/lobby-broker/src/tournament.rs, crates/lobby-broker/src/lib.rs
+Commits in range: 447783db9 (initial impl), 5304a1bc0 (fix round 1), 4b1808930 (fix round 2)
+Implementation-review rounds: 3 (round 1: 1 MED + 2 LOW; round 2: 2 MED, both from round-1's
+fix landing cleanly reviewed but surfacing new issues; round 3: zero findings, explicit accept)
+Completion gate at CANDIDATE_SHA: cargo fmt --check clean, cargo build -p lobby-broker pass,
+cargo test -p lobby-broker --lib 121 passed / 0 failed, cargo clippy --all-targets -D warnings clean.
+rev-parse HEAD == CANDIDATE_SHA: confirmed.
+No abandoned candidates, no T4 firing, no charter.
+
+## Entry 3 — superseding final acceptance (corrects entry 2)
+
+Entry 2's acceptance at 4b180893098b419212c59b1f5c5fe2ddf3c834a8 is superseded. Before
+that acceptance was communicated as truly final, the orchestrator attempted to close out
+a self-disclosed risk (unverified MTR Appendix E round-count table) using web access, but
+misread a garbled PDF table extraction and proposed a change that would have been a
+regression (9-16 players: 4 rounds -> wrongly 5; large fields: introduced a false plateau
+at 10 rounds and non-power-of-two boundaries). This was never committed -- the user, citing
+direct real-world competitive Magic tournament experience, corrected it before checkpoint
+(16 players -> 4 rounds; 17 players -> 5 rounds; clean unbroken doubling with no plateau,
+confirmed via "Etc" up through arbitrarily large fields). The mistaken uncommitted diff was
+discarded via `git checkout` and a corrected round landed that changes zero production code
+(doc-comment + test only), independently verified byte-for-byte by both the orchestrator and
+a fresh /review-impl round.
+
+BASE_SHA:      18afce1f242046f02fbe1554c29d569dfc0d0dcb
+CANDIDATE_SHA: 5551ab3f6b3318f3f80aad023aee91187285d731 (supersedes 4b180893098b419212c59b1f5c5fe2ddf3c834a8)
+Frozen scope:  crates/lobby-broker/src/tournament.rs, crates/lobby-broker/src/lib.rs
+Commits in range: 447783db9 (initial impl), 5304a1bc0 (fix round 1), 4b1808930 (fix round 2),
+                  5551ab3f6 (fix round 3: doc/test correction, zero behavior change)
+Implementation-review rounds: 4 total (round 1: 1 MED + 2 LOW; round 2: 2 MED; round 3: zero
+findings, explicit accept; round 4: zero findings, re-confirmed after the round-3 doc fix)
+Completion gate at CANDIDATE_SHA (cold build): fmt clean, build pass, 122 passed / 0 failed,
+clippy clean.
+rev-parse HEAD == CANDIDATE_SHA: confirmed.
+No abandoned candidates were ever committed (the mis-derived table was caught pre-checkpoint).
+
+## Entry 4 — merged upstream
+
+PR phase-rs/phase#8234 opened from myfork/feat/tournament-organizer-pr1-core,
+went through 2 additional real maintainer (matthewevans) review rounds beyond
+this session's own internal pipeline:
+  - Round A (CHANGES_REQUESTED): generate_pairings had no ceiling on
+    current_round vs total_rounds() -- fixed in 35032f9b9, pushed, replied.
+  - Round B (CHANGES_REQUESTED): the round-A fix's ceiling depended on a
+    live-recomputed total_rounds() that a mid-event drop could shrink below
+    an already-reached round (concretely: a 3-player single-elimination
+    bracket's structurally-required final) -- fixed in 3fc2764e9 by adding
+    TournamentMeta::resolved_total_rounds, latched once at round-1 start.
+  - Round C: APPROVED at 3fc2764e95d9bf6189e2050c3c3562b2d76e63bc.
+All 18 CI checks green. PR MERGED 2026-08-31T21:47:15Z.
+
+Final merged head: 3fc2764e95d9bf6189e2050c3c3562b2d76e63bc
+(6 commits total on top of BASE_SHA 18afce1f242046f02fbe1554c29d569dfc0d0dcb:
+ 447783db9, 5304a1bc0, 4b1808930, 5551ab3f6, 35032f9b9, 3fc2764e9)

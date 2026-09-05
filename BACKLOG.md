@@ -25,6 +25,41 @@ so there's a record of what's already been resolved.
 
 ## Open
 
+### [infra] Two independent copies of the CR 510.1c/702.19b combat-damage division in the integration tests
+
+- **Status:** open
+- **Source:** 2026-09-05, `/review-impl` LOW finding on the issue #8485 fix.
+  Deliberately not fixed there: sharing the logic properly means extracting a
+  helper in `crates/engine/tests/integration/rules.rs`, which was outside that
+  change's frozen scope.
+- **Context:** the combat-damage division — assign each blocker its
+  `lethal_minimum` in order, then give the remainder to the defending player as
+  trample damage (CR 702.19b) or dump it on the last blocker so the assignment
+  totals the attacker's power (CR 510.1c) — now exists **twice**:
+  `rules.rs::run_combat_with_blocker_divisions` and the `WaitingFor::
+  AssignCombatDamage` arm of
+  `issue_8485_maze_of_ith_defender.rs::run_mazed_combat_with_maze_removal`. The
+  second copy was added because the first lives inside a whole-combat driver that
+  cannot host the Maze-activation timing the #8485 tests need.
+- **Why it matters:** this is RULES-BEARING logic, not boilerplate. CR 510.1c's
+  lethal-damage ordering and CR 702.19b's trample remainder are exactly the kind
+  of thing that gets corrected once and then silently disagrees between copies —
+  and a test helper that divides damage wrongly produces tests that pass while
+  asserting the wrong thing. The #8485 work already demonstrated the failure mode
+  it protects against: two tests in that file were passing vacuously for months
+  because no division was performed at all.
+- **Prompt:** Extract the CR 510.1c/702.19b combat-damage division out of
+  `crates/engine/tests/integration/rules.rs::run_combat_with_blocker_divisions`
+  into a standalone `pub` helper in `rules.rs` that takes the
+  `WaitingFor::AssignCombatDamage` payload and returns the `(assignments,
+  trample_damage)` pair (or submits the `GameAction` directly). Then repoint both
+  callers at it: `run_combat_with_blocker_divisions` itself and the
+  `AssignCombatDamage` arm in
+  `crates/engine/tests/integration/issue_8485_maze_of_ith_defender.rs`. Keep the
+  CR annotations on the extracted helper. Verify with
+  `cargo test -p phase-engine --test integration` — the Maze file's 14 tests and
+  every banding/menace/trample fixture that uses the shared driver must stay green.
+
 ### [bug-fix] Unbounded-expiry resolution riders stay layer-fragile — the one subclass issue #8485 deliberately did not fix
 
 - **Status:** open

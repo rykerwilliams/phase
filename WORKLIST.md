@@ -65,9 +65,13 @@ Protocol — before running any compiling cargo command (`build`, `test`,
 2. If "Current holder" is `none`, claim it: set it to `<agent-name> since <UTC timestamp>`,
    commit as `cargo-lock: claim (<agent-name>)`, push immediately —
    before running your command, not after. **If you already know your run
-   is long, append an estimate: `<agent-name> since <UTC timestamp> (expected
-   ~75m, full suite)`.** Optional, but it is the difference between a holder
-   another agent can reason about and one they have to interrupt to ask about.
+   is long, append an estimate, and append your build's PID:
+   `<agent-name> since <UTC timestamp> (expected ~75m, full suite, pid 512357)`.**
+   Both optional and both purely additive inside the holder string — an agent
+   that ignores them reads the row exactly as before. The estimate is the
+   difference between a holder another agent can reason about and one they have
+   to interrupt to ask about. The PID is the difference between a lock that is
+   *cooperative* and one that is *verifiable*: see Rule 6.
 3. If the push is rejected, re-sync and check who holds it now. If someone
    else claimed it in that window, **wait and retry later** — don't run
    your cargo command anyway and don't fight over the lock row.
@@ -84,6 +88,22 @@ Protocol — before running any compiling cargo command (`build`, `test`,
    own history (`git log --grep="cargo-lock"`) before treating a hold as
    abnormal: some tracks legitimately hold for over an hour.
 
+   **Decide staleness by asking the kernel, not by guessing from elapsed
+   time.** If the holder published a PID:
+
+   ```bash
+   kill -0 <pid> 2>/dev/null && echo alive || echo dead
+   readlink /proc/<pid>/cwd          # which worktree owns this build
+   ```
+
+   Alive, with a cwd in the holder's own worktree, means the hold is healthy
+   no matter how long it has run — queue and say nothing. If the holder did
+   not publish a PID you can still usually attribute a build:
+   `ps -eo pid,etimes,args | grep -E 'cargo|rustc'`, then `readlink` each
+   cwd. **Do this BEFORE messaging the holder.** Elapsed time only ever
+   supports a guess; the kernel answers. Even so, a dead PID is grounds for
+   a note, not for clearing the row yourself — that is still a human call.
+
    > **FOR A HUMAN — the 20-minute number is probably wrong now, and two
    > agents hit it independently on 2026-09-06.** `custom-format-phase-1d-lead`
    > reports a ~75-minute uncontended full-suite run, and its actual holds on
@@ -98,6 +118,20 @@ Protocol — before running any compiling cargo command (`build`, `test`,
    > here: raising it affects every agent following this board, and Rule 6's
    > own logic is that a human decides, not one agent unilaterally.
    > — raised by `swords-608-2b`, concurred by `custom-format-phase-1d-lead`
+   >
+   > **Second, related, and already adopted by both of us: publish your build's
+   > PID in the holder string.** Every other safeguard here — the timestamp, the
+   > duration estimate, releasing on exit — depends on the holder behaving
+   > correctly or dying politely. A PID depends on nothing; the kernel answers.
+   > It is the only part of this design that survives a holder being SIGKILLed
+   > mid-build, which is exactly what the harness's OOM-class reaper does and
+   > exactly what no `trap` can catch (`SIGKILL` is uncatchable, so
+   > `trap release EXIT INT TERM HUP` converts only the *graceful* deaths from
+   > leaks). On 2026-09-06 a 90-minute hold was resolved as healthy by a single
+   > `readlink /proc/<pid>/cwd` after four messages between two agents had failed
+   > to settle it. The field is additive inside the holder string, so agents that
+   > ignore it are unaffected. Both `swords-608-2b` and
+   > `custom-format-phase-1d-lead` now publish it.
 
 This is advisory, not a technical lock — it only works if every agent
 actually checks and respects it. Treat holding it like holding a talking

@@ -1770,3 +1770,60 @@ so there's a record of what's already been resolved.
   cleanup" defect. **Needs a concrete repro (specific cards, steps) before
   further engine-side investigation is worthwhile** — do not assume this
   is fixed; also do not assume it's real without a repro.
+
+### [feature] Tournament format shapes — multi-stage brackets (Swiss→cut, group→playoff, monthly async) + the cheap "Swiss + N rounds" affordance
+
+- **Source:** 2026-09-05 design discussion while landing the tournament
+  organizer (PR #8325 + protocol v6). Captured here so it survives past the
+  session. Nothing implemented; this is scoping for when we loop back.
+- **What the engine does TODAY** (verified in
+  `crates/lobby-broker/src/tournament.rs`): `BracketShape` is `{ Swiss,
+  SingleElimination }`, chosen **standalone** — they do NOT chain. A Swiss
+  event runs auto-derived rounds (`default_total_rounds`: H2H Swiss = smallest
+  `r` with `2^r ≥ max(players, 8)`) and ends on **final standings**, no
+  playoff. An SE event is a standalone bracket (Appendix E 4–8 field, plus the
+  degenerate 2/3-player finals). The word "cut" in the code only means the SE
+  player-count range, not a Swiss→SE transition. The combined form was a
+  deliberate v1 scope-out.
+
+- **Already supported, do NOT build (only a UX shortcut is missing): "Swiss +
+  N more full rounds"** (the community "Swiss plus one" — play the auto rounds
+  plus one/more FULL rounds, champion by final standings, no cut). `total_rounds`
+  is an override that "wins outright" and is **deliberately unbounded** at
+  create-validation (`validation.rs`), so an organizer sets
+  `CreateTournament.total_rounds` = (auto default) + N and the engine pairs that
+  many full Swiss rounds. It fits the existing single-stage Swiss model.
+  **Cheap frontend follow-up (do this one first, it's tiny):** an "Automatic +
+  N" affordance — a control (or an optional `plus_rounds` wire field) that
+  tracks the live default and adds N, so the organizer doesn't have to know the
+  default and type an absolute number.
+
+- **Deferred multi-stage work (the real feature), easiest → hardest:**
+  1. **Swiss → cut to Top-X (single-elim).** ~1.5× one tournament PR. Fully
+     SYNCHRONOUS — reuses the round state machine and BOTH pairing builders
+     (`build_swiss_round`, `build_single_elimination_round`) unchanged. New:
+     (a) single-stage → two-stage meta (`current_stage`, pairings tagged by
+     stage), (b) the cut + SE seeding (freeze Swiss standings → top X → seed
+     1v8/2v7…). "Swiss plus one" as a top-2 SE final is just X=2 here.
+  2. **Group (round-robin) → SE playoff, synchronous.** Adds a `RoundRobin`
+     builder + group partitioning; still synchronous.
+  3. **Monthly async groups → playoff.** ~2–3×. The group stage is
+     ASYNC/time-windowed (all group matches open at once, ~3-week deadline,
+     report in any order, continuous standings) — a NEW progression mode the
+     round-synchronized engine lacks — plus multi-week persistence. Rides the
+     protocol-v6 expiring/rotating credentials directly (tokens survive/renew
+     across the window). Do NOT fake round-robin as N−1 synchronized rounds —
+     that breaks the "play your matches whenever in 3 weeks" UX; model it as a
+     flat open match pool with a deadline.
+
+- **Recommended architecture:** model a tournament as ordered stages, each
+  declaring TWO axes — *progression mode* (`SynchronizedRounds |
+  OpenPoolWithDeadline`) and *bracket* (`RoundRobin | Swiss |
+  SingleElimination`) — with a cut rule between stages. One primitive covers
+  Swiss→Top8, groups→knockout, and the monthly async format (build-for-the-
+  class, avoids per-format special cases). Each stage transition / cut is a
+  broker-owned state change and fits the v6 `open_actions` / `report_gate`
+  affordance model already added.
+- **Suggested order when we return:** the "Automatic + N rounds" affordance
+  first (tiny, frontend-only), then Swiss→cut-to-Top-X as the next tournament
+  PR, then the group/async shapes.

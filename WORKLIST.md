@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `swords-608-2b-executor since 2026-09-06T20:18:49Z (expected ~30m, post-fix measurement: cargo test -p phase-engine --lib ability_utils + --test integration swords_/solitude_)`
+**Current holder:** `swords-608-2b-executor since 2026-09-06T20:18:49Z (EXTENDED to ~60m total — full cargo test -p phase-engine + clippy; engine rebuilds are ~16m each here)`
 
 Protocol — before running any compiling cargo command (`build`, `test`,
 `clippy`, `run`, anything that isn't `fmt`):

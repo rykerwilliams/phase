@@ -64,7 +64,10 @@ Protocol — before running any compiling cargo command (`build`, `test`,
 1. Sync this file first (Rule 1).
 2. If "Current holder" is `none`, claim it: set it to `<agent-name> since <UTC timestamp>`,
    commit as `cargo-lock: claim (<agent-name>)`, push immediately —
-   before running your command, not after.
+   before running your command, not after. **If you already know your run
+   is long, append an estimate: `<agent-name> since <UTC timestamp> (expected
+   ~75m, full suite)`.** Optional, but it is the difference between a holder
+   another agent can reason about and one they have to interrupt to ask about.
 3. If the push is rejected, re-sync and check who holds it now. If someone
    else claimed it in that window, **wait and retry later** — don't run
    your cargo command anyway and don't fight over the lock row.
@@ -76,7 +79,25 @@ Protocol — before running any compiling cargo command (`build`, `test`,
 6. If you find a holder that's been sitting far longer than any real build
    should take (say 20+ minutes) with no explanation, don't clear it
    yourself — leave a note and let a human decide, same as a stale item
-   claim.
+   claim. **A holder carrying an `(expected ~Nm)` estimate and still inside
+   it is NOT stale — don't query it, just queue.** Also check the holder's
+   own history (`git log --grep="cargo-lock"`) before treating a hold as
+   abnormal: some tracks legitimately hold for over an hour.
+
+   > **FOR A HUMAN — the 20-minute number is probably wrong now, and two
+   > agents hit it independently on 2026-09-06.** `custom-format-phase-1d-lead`
+   > reports a ~75-minute uncontended full-suite run, and its actual holds on
+   > this board have been 112, 128, 81 and 74 minutes — all legitimate, all
+   > tripping this rule by a wide margin. As written, the correct behaviour (a
+   > long verified run) is indistinguishable from the failure mode the rule
+   > exists to catch, so the only way to tell them apart is to interrupt the
+   > holder and ask — which both `custom-format-phase-1d-lead` and
+   > `swords-608-2b` had to do. The `(expected ~Nm)` convention added to
+   > protocol step 2 above makes them distinguishable without guessing a
+   > number, which is why the 20-minute threshold itself has been left ALONE
+   > here: raising it affects every agent following this board, and Rule 6's
+   > own logic is that a human decides, not one agent unilaterally.
+   > — raised by `swords-608-2b`, concurred by `custom-format-phase-1d-lead`
 
 This is advisory, not a technical lock — it only works if every agent
 actually checks and respects it. Treat holding it like holding a talking
@@ -86,6 +107,7 @@ stick: grab it, do the one thing you needed it for, let go.
 
 | Item | Track | Status | Agent | Claimed-At | Branch | PR |
 |---|---|---|---|---|---|---|
+| **[Engine bug, CR 608.2b, issues #5965 + #8058]** Swords to Plowshares — a spell whose only target became illegal (died, or gained hexproof) in response still resolves instead of being countered on resolution: #8058 gains life off a dead creature, #5965 exiles a creature that gained hexproof. **One defect, not two** — hexproof IS rechecked correctly by `can_target`; the chain-level fizzle is masked. `flatten_targets_in_chain` concatenates targets from `sub_ability`/`else_ability` riders, and Swords' life-gain rider is a context-ref (`GainLife { player: ParentTargetController }`) whose arm in `validate_targets_in_chain` (`ability_utils.rs:2434-2438`) returns its targets UNFILTERED — deliberately, it exists for Flickerwisp. So the validated list is non-empty even when the real target is illegal and `check_fizzle` (`targeting.rs:534`, fizzles iff the legal list is empty) never fires. Class-general: hits every 'target X. <anaphor rider>' spell, not just Swords. Fix is scoped to counting only genuinely-specified targets at the fizzle seam, leaving the Flickerwisp arm intact. Running through `/engine-implementer`; plan is at review round 4, code design frozen since round 2. | fizzle-608-2b | in-progress | swords-608-2b | 2026-09-06 | (not yet cut) | — |
 | **[Discovered, engine bug, follow-up from #5850's investigation]** Pariah — real Oracle text is "...is dealt to **enchanted creature** instead," but `parse_damage_redirection_replacement`'s redirect-detection (`oracle_replacement.rs`, `scan_contains(working_lower, "is dealt to ~ instead")`) only recognizes literal self-reference, not "enchanted creature" — so Pariah parses today with `redirect_target: None`, meaning it's a plain, no-op prevention shield with no redirect at all (not even the dead-data version #5850 fixes for the other 3 cards). Needs a parser fix recognizing "enchanted creature" via the existing `TargetFilter::AttachedTo` combinator (already used for this exact phrase elsewhere — `oracle_replacement.rs:4879`/`6134`/`7536` are the precedent sites), plus resolving whether `DamageRedirectTarget` (currently `Controller`/`SourceObject`/`ChosenObjectTarget` only) needs a 4th variant to represent "the object I'm attached to," or whether `AttachedTo` can resolve without going through `DamageRedirectTarget` at all — open design question for whoever picks this up. | old-school-1993-95 | open | — | — | — | — |
 | **[Discovered, engine bug, follow-up from #5850's investigation]** Pariah's Shield — mis-scoped in the current parser: it hard-codes `redirect_target: TargetFilter::SelfRef` without ever parsing its actual "any target" clause, and is mechanically a CR 615.5 prevention-with-additional-effect (like Phyrexian Hydra), not a CR 614.9 redirection — applying #5850's fix mechanism to it would actually *regress* it, since Pariah's Shield is an enchantment and would always fail the redirect-recipient legality check (converting "prevents all damage" into "damage passes through unprevented"). Needs its own remodel following the existing Phyrexian Hydra pattern (`extract_prevention_followup`, `oracle_replacement.rs:9112-9201`; the aggregate-stash mechanic, `replacement.rs:1543-1551`, `QuantityRef::EventContextAmount`), including parsing a genuine "any target" choice each time it fires. | old-school-1993-95 | open | — | — | — | — |
 | **[Follow-up, engine cleanup, not a bug]** `TargetFilter::TriggeringPlayer`-across-pause bug (see above) is now FIXED in phase-rs/phase#5742 via a new, general `PendingContinuation.trigger_context` mechanism (extends `ResolvingTriggerContext`, wired into `drain_pending_continuation`). That fix deliberately did NOT consolidate two other, narrower pre-existing mechanisms solving the same conceptual problem for two other pause types — `GameState.pending_choose_zone_trigger_context` (used only by `ChooseFromZoneChoice`) and `WaitingFor::ChooseObjectsSelection.trigger_event` (used only by that specific choice type) — both remain fully functional and now give redundant (not conflicting) protection. Consolidating all three onto the single new path is a real, identified follow-up (documented in a doc comment on `ResolvingTriggerContext`, `types/game_state.rs`), deferred to keep the bugfix's blast radius focused. Low urgency — no known correctness gap, purely an architecture-symmetry cleanup. | old-school-1993-95 | open | — | — | — | — |

@@ -1,5 +1,10 @@
 # Old-card backlog — cards with a printing 2003 or earlier
 
+> **Working this backlog? Read [`OLD-CARD-RUNBOOK.md`](OLD-CARD-RUNBOOK.md) first.** It is the
+> self-contained entry point: which skills to invoke, the staleness check, the cargo-lock protocol,
+> and the environment constraints (Tilt is down, background builds get reaped, the fork is 551
+> commits behind upstream). A fresh session can start there with no other input.
+
 _Generated 2026-09-10 against `upstream/main` `1cde7a25d`; open-issue snapshot the same day (1106 open issues)._
 
 **Fork-only working document.** Like `BACKLOG.md` and `WORKLIST.md`, this never appears in a PR to `phase-rs/phase`.

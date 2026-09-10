@@ -226,3 +226,47 @@ An issue-number signal exists. Verify, then comment recommending closure rather 
 | [#8058](https://github.com/phase-rs/phase/issues/8058) | Lightning Bolt, Swords to Plowshares | commit-claims-issue, test-references-issue, card-in-tests(2) | Swords to Plowshares still grants life when the spell fizzles before resolution |
 | [#8147](https://github.com/phase-rs/phase/issues/8147) | Mobilize | commit-claims-issue | Voice of Victory (Mobilize) — Warrior tokens are never sacrificed at the next en |
 | [#8775](https://github.com/phase-rs/phase/issues/8775) | Lightning Bolt | commit-claims-issue, test-references-issue, card-in-tests(1) | Ogre Battlecaster: "where X is that spell's mana value" resolves X to 0 — the de |
+
+## Triage pass — 2026-09-10 (the LIKELY-FIXED bucket, worked through)
+
+All 17 checked by hand. **The `commit-claims-issue` signal was wrong about 5 of them**, because it
+matched any commit *mentioning* `#N` without checking which DIRECTION the reference ran. A commit can
+name an issue to fix it, to defer it, to declare itself blocked on it, or to file it. Only the first
+means fixed.
+
+**Check the reference direction, not just its presence:**
+
+```bash
+git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # read HOW it is cited
+```
+
+### Confirmed fixed — commented, closure recommended (5)
+
+| issue | evidence |
+|---|---|
+| [#1098](https://github.com/phase-rs/phase/issues/1098) Land Grant | `4f846356` traced the chain, found it already working, added two end-to-end tests incl. a hostile inverted-gate fixture |
+| [#1272](https://github.com/phase-rs/phase/issues/1272) Violent Urge | `52725ed3`: "already fixed generically by #2999 (ParentTarget GenericEffect binding)"; now pinned. `needs-runtime-verify` label is stale |
+| [#4886](https://github.com/phase-rs/phase/issues/4886) Jinnie Fay | `11eb20f5` (PR #4938), two commits naming it + a HIGH review follow-up. Labelled p0-softlock and still open |
+| [#7453](https://github.com/phase-rs/phase/issues/7453) "can't block it" | `e78ee370`: "ALREADY FIXED at `f59c90be` by `3e83d35bc` (PR #7452)"; that commit added only the regression pin, discrimination measured |
+| [#7923](https://github.com/phase-rs/phase/issues/7923) leading duration | `29272b02` carries a `Closes #7923` trailer |
+
+### False positives — actually LIVE, and unusually well-specified (5)
+
+These are **good candidates**: each has a merged commit that documents the gap precisely.
+
+| issue | how the commit actually cites it |
+|---|---|
+| [#1234](https://github.com/phase-rs/phase/issues/1234) colored-shard feasibility | `ae300a2a2`: "reference **follow-up** issues #1234 … so future contributors discover the **deferred** limitations" |
+| [#1235](https://github.com/phase-rs/phase/issues/1235) chain-sacrifice over-count | same commit, same deferral |
+| [#7721](https://github.com/phase-rs/phase/issues/7721) kicker "and with <ability>" | `dd990e880`: "Refs #7721 — **PARTIAL**, deliberately not an auto-closing trailer … the issue **must stay open**." Fixes 10 of 13 lines; Anavolver/Necravolver/Rakavolver still each missing one half |
+| [#7962](https://github.com/phase-rs/phase/issues/7962) injected duration defaults | `29272b02e`: "Closing that half … is **blocked on** #7962" |
+| [#8775](https://github.com/phase-rs/phase/issues/8775) Ogre Battlecaster X=0 | `a55f0d7ae`: "the value gap is **filed as** #8775" — the commit created it |
+
+### Not actioned (7)
+
+| issue | why |
+|---|---|
+| #5653 Chains, #7510 Library of Leng | handled 2026-09-09; #7510's regression merged as PR #8770 |
+| #5965, #8058 Swords to Plowshares | owned by another agent (`swords-608-2b`) on this board — do not comment over it |
+| #8147 Voice of Victory | already labelled `status:fixed-unreleased`; correctly triaged |
+| #1674, #6287 | not card bugs — matcher noise (`Decompose`, `Override` are real card names appearing in refactor/infra titles) |

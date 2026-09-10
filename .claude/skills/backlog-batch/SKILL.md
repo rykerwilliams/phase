@@ -1,16 +1,38 @@
 ---
-name: old-card
-description: Start or continue work on a buggy old MTG card (printed 2003 or earlier) from the local candidate backlog. Picks the next unclaimed candidate, runs the staleness check that decides whether the issue is already fixed, claims the coordination row, then drives reproduce-fix-verify-PR. Use when the user says "old card work", "next old card", "work the old-card backlog", or invokes /old-card with or without an issue number.
+name: backlog-batch
+description: Work the local old-card candidate backlog in a batch — pick the next unclaimed candidate, run the staleness check that decides whether it is already fixed, claim it, then drive reproduce-fix-verify-PR, and repeat. Each item ends in either a merged-ready PR or a recommend-closure comment. Use when the user says "backlog batch", "work the backlog", "old card work", "next old card", or invokes /backlog-batch with a count or an issue number.
 ---
 
-# old-card — work the old-card backlog end to end
+# backlog-batch — work the old-card backlog, one candidate at a time
 
-Drives one candidate from `BACKLOG-old-cards-2003.md` to a merged-ready PR, or to a
-recommend-closure comment when the issue turns out to be already fixed. **Both are successful
-outcomes.** Roughly a third of open issues in this repo are already fixed but still open.
+Each item ends in one of two successful outcomes:
 
-`$ARGUMENTS` — optional. An issue number (`/old-card 7721`) works that issue. Empty picks the next
-unclaimed LIVE candidate.
+- a **merged-ready PR** for a genuine bug, or
+- a **recommend-closure comment** when the issue turns out to be already fixed.
+
+Roughly a third of open issues here are already fixed but still open, so the second outcome is
+common and is real work — not a failed attempt.
+
+`$ARGUMENTS` — optional:
+- empty → work candidates continuously, reporting after each, until told to stop
+- a number ≤ 20 (`/backlog-batch 3`) → work that many candidates, then stop and summarise
+- a number > 100 (`/backlog-batch 7721`) → treat as an issue number and work only that one
+
+## Batch loop
+
+Repeat until the count is met, the LIVE table is exhausted, or the user stops you:
+
+1. Steps 0-8 below for one candidate.
+2. **Report before moving on**: issue, verdict (fixed-already / fixed-by-me / blocked), PR link or
+   comment link, and what is left.
+3. Re-read `WORKLIST.md` before the next pick — other agents claim rows while you work.
+
+**Stop the batch early and ask** if: the fix needs a new engine enum variant that
+`add-engine-variant` refuses, two candidates in a row turn out already-fixed in a way that suggests
+the backlog is stale, or a review finding implies the approach is wrong. Do not push through those.
+
+Between items, prefer **reusing one warm worktree** (switch branches inside it) over creating a new
+one per candidate — a cold build is ~25 min and will not fit the 600s foreground cap.
 
 ---
 
@@ -60,7 +82,7 @@ the first means fixed. Squash subjects read `title (#issue) (#PR)`, so a bare ma
 number. Ignoring direction produced 5 false positives out of 17 on the last sweep.
 
 **If already fixed:** comment on the issue naming the fixing commit/PR and the test that pins it,
-recommend closure, move the backlog row to its Done table, and **go back to Step 1**. Do not
+recommend closure, move the backlog row to its Done table, and **go to the next item in the batch**. Do not
 re-implement. Do not open a PR.
 
 ## Step 3 — Claim
@@ -117,4 +139,4 @@ thread saying what changed. A red check may be a flake — prove it before assum
 
 ## Step 8 — Record
 
-Update `WORKLIST.md` (Done on merge) and `BACKLOG-old-cards-2003.md`. Then offer the next candidate.
+Update `WORKLIST.md` (Done on merge) and `BACKLOG-old-cards-2003.md`, then report this item and continue the batch loop.

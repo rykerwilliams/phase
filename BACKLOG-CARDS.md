@@ -2,7 +2,7 @@
 
 > **Working this? Read [`OLD-CARD-RUNBOOK.md`](OLD-CARD-RUNBOOK.md) first**, or just run `/backlog-batch`.
 
-_Generated 2026-09-11 against `upstream/main` `1cde7a25d` · 1106 open issues · watchlist resolves to 6594 cards_
+_Generated 2026-09-11 against `upstream/main` `1cde7a25d` · 1106 open issues · watchlist resolves to 6595 cards_
 
 **Do not hand-edit** — regenerate with `python3 backlog/scan.py`. To change what is tracked, edit `backlog/watchlist.txt`.
 

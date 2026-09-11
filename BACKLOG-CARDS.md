@@ -2,13 +2,13 @@
 
 > **Working this? Read [`OLD-CARD-RUNBOOK.md`](OLD-CARD-RUNBOOK.md) first**, or just run `/backlog-batch`.
 
-_Generated 2026-09-11 against `upstream/main` `1cde7a25d` · 1106 open issues · watchlist resolves to 6595 cards_
+_Generated 2026-09-11 against `upstream/main` `aae840a2b` · 1110 open issues · watchlist resolves to 6595 cards_
 
 **Do not hand-edit** — regenerate with `python3 backlog/scan.py`. To change what is tracked, edit `backlog/watchlist.txt`.
 
 | verdict | count | meaning |
 |---|---:|---|
-| **LIVE** | 105 | No signal that it is fixed. Best candidates. |
+| **LIVE** | 107 | No signal that it is fixed. Best candidates. |
 | partial-coverage | 51 | Card appears in some test; nothing ties a fix to THIS issue. |
 | CHECK-DIRECTION | 17 | A commit/test cites the issue — but a commit can cite an issue to **fix**, **defer**, be **blocked on**, or **file** it. Only the first means fixed. Run the direction check before believing this bucket. |
 
@@ -19,7 +19,7 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 ★ = a card you explicitly named in the watchlist.
 
 
-## LIVE — best candidates (105)
+## LIVE — best candidates (107)
 
 | issue | card(s) | title | labels |
 |---|---|---|---|
@@ -63,7 +63,8 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#3658](https://github.com/phase-rs/phase/issues/3658) | Mana Vault (1997) | Mana Vault (paying even though its not tapped) — I think when i first summoned the card I ta... | status:needs-repro, area:engine, priority:p3-card-specific |
 | [#5273](https://github.com/phase-rs/phase/issues/5273) | Squallmonger (1999) | Squallmonger — Cool card played by the AI. | status:needs-repro, area:ai, priority:p4-ui-polish |
 | [#7742](https://github.com/phase-rs/phase/issues/7742) | Need for Speed (2001) | need for speed | status:confirmed, area:engine |
-| [#8762](https://github.com/phase-rs/phase/issues/8762) | Spelljack (2002) | Counter's rider branch drops its tail: Spelljack and five more lose the instruction after th... | — |
+| [#8804](https://github.com/phase-rs/phase/issues/8804) | Blizzard (1995) | [Card Bug] Blizzard Brawl snow-conditional buff lands on the wrong creature | status:needs-triage |
+| [#8798](https://github.com/phase-rs/phase/issues/8798) | Tainted Pact (2001) | ChangeZone{target: ParentTarget} re-binds to the source object when its producing parent pro... | — |
 | [#8751](https://github.com/phase-rs/phase/issues/8751) | Apocalypse (1997) | Golbez, Crystal Collector, Apocalypse Demon, Consuming Aberration End Step Trigger BUG | status:needs-triage |
 | [#8738](https://github.com/phase-rs/phase/issues/8738) | City of Traitors (1998) | [Card Bug] City of Traitors misses land-play trigger after Cavern of Souls choice | — |
 | [#8590](https://github.com/phase-rs/phase/issues/8590) | Safeguard (1997) | Brokers' Safeguard reports supported=true/gap_count=0 while swallowing the exile, the return... | — |
@@ -100,6 +101,7 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#6659](https://github.com/phase-rs/phase/issues/6659) | Feedback (1997) | Deck builder copy-limit affordance: alias spellings counted separately, search-add ungated | status:confirmed, area:engine, area:deckbuilder |
 | [#6463](https://github.com/phase-rs/phase/issues/6463) | Fyndhorn Elves (1995) | Declare Attackers — The game asks me if I would like to attack when I have no eligible attac... | status:confirmed, area:engine, area:frontend |
 | [#7739](https://github.com/phase-rs/phase/issues/7739) | Massacre (2000) | Toski, Bearer of Secrets | status:confirmed, area:engine |
+| [#8799](https://github.com/phase-rs/phase/issues/8799) | Free-for-All (1998), Tainted Pact (2001) | UntilStopConditions repeat with a starved producer should be a draw (CR 104.4b), not silent ... | — |
 | [#8785](https://github.com/phase-rs/phase/issues/8785) | Override (2003) | [Card Bug] Weathered Sentinels: attack permission is parsed as a Defender grant | — |
 | [#8741](https://github.com/phase-rs/phase/issues/8741) | Fickle Efreet (2000), Rogue Skycaptain (1996), Rohgahh of Kher Keep (1994) | Akroan Horse: ETB chooses an opponent but fails to transfer control | — |
 | [#8707](https://github.com/phase-rs/phase/issues/8707) | Contamination (1998) | check-parser-combinators.sh silently skips its own seam suite when the suite or python3 is a... | — |

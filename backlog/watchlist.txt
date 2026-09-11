@@ -36,4 +36,4 @@ q: year<=2003 -t:token -t:scheme -t:plane
 # Black Lotus
 # Urza's Saga
 # Ragavan, Nimble Pilferer
-Void Mirror        # issue #8807 filed 2026-09-11 — we are working on it
+Void Mirror        # issue #8807 fixed in phase-rs/phase#8809, merged 2026-09-11

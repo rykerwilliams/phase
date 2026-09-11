@@ -67,7 +67,12 @@ def sh(*a):
 def read_watchlist():
     pools, names = [], []
     for line in (ROOT / "backlog" / "watchlist.txt").read_text().splitlines():
-        line = line.strip()
+        # Strip a trailing comment before stripping whitespace. Only a `#` that
+        # follows whitespace starts one, so a name or query containing `#` is
+        # left alone. Without this an annotated entry ("Void Mirror  # see
+        # issue #8807") is sent to Scryfall verbatim and 404s, which reads as
+        # a misspelled card rather than a comment the format didn't support.
+        line = re.split(r"\s#", line, maxsplit=1)[0].strip()
         if not line or line.startswith("#"):
             continue
         (pools if line.startswith("q:") else names).append(

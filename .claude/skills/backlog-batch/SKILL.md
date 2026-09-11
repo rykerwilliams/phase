@@ -46,7 +46,7 @@ git merge --ff-only origin/main -q
 Read, in this order:
 1. **`OLD-CARD-RUNBOOK.md`** — the authority. Environment constraints, lock protocol, verification
    standard, PR/handoff rules. Everything below is a summary of it; when they disagree, it wins.
-2. **`BACKLOG-old-cards-2003.md`** — the candidate table.
+2. **`BACKLOG-CARDS.md`** — the candidate table.
 3. **`WORKLIST.md`** — who is working on what, and the cargo lock.
 
 Do not skip the runbook. It contains facts that are false in `CLAUDE.md` (Tilt is not running) and
@@ -139,4 +139,4 @@ thread saying what changed. A red check may be a flake — prove it before assum
 
 ## Step 8 — Record
 
-Update `WORKLIST.md` (Done on merge) and `BACKLOG-old-cards-2003.md`, then report this item and continue the batch loop.
+Update `WORKLIST.md` (Done on merge) and `BACKLOG-CARDS.md`, then report this item and continue the batch loop.

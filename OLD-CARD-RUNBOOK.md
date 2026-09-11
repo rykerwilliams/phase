@@ -11,7 +11,7 @@ from the repo.
 
 ## 0. TL;DR
 
-1. Pick the top unclaimed row from **`BACKLOG-old-cards-2003.md` → LIVE**.
+1. Pick the top unclaimed row from **`BACKLOG-CARDS.md` → LIVE**.
 2. Run the **staleness check** (§3). Roughly a third of open issues are already fixed. If fixed:
    comment recommending closure and pick the next one — that is a complete, valuable unit of work.
 3. Claim a row in `WORKLIST.md`.
@@ -167,7 +167,7 @@ guessing from elapsed time. `cargo fmt` needs no lock.
 - A red CI check may be a **flake** — verify before assuming it is yours (diff scope, does it pass
   locally, did a sibling PR pass the same job). Document the evidence rather than silently re-running.
 - **You cannot merge, close, or auto-queue.** Get it green, answer review, then hand off and say so.
-- Update `WORKLIST.md` (row → Done on merge) and `BACKLOG-old-cards-2003.md`.
+- Update `WORKLIST.md` (row → Done on merge) and `BACKLOG-CARDS.md`.
 
 ---
 

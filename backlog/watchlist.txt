@@ -1,0 +1,39 @@
+# Card watchlist — what the backlog scanner looks for in open issues.
+# Fork-only. Regenerate the backlog after editing:  python3 backlog/scan.py
+#
+# THREE line kinds:
+#   q: <scryfall query>   pull a whole pool (stoplist-filtered — see note)
+#   <Card Name>           an exact card name (ALWAYS matched, bypasses the stoplist)
+#   # comment
+#
+# NOTE ON POOLS vs NAMES.
+#   Pool lines are filtered through a ~200-entry stoplist of card names that are also
+#   ordinary English ("Balance", "Terror", "Sacrifice", "Fear", "Shock"). Without it a
+#   broad pool matches nearly every issue and the backlog is noise.
+#   An explicitly named card is ALWAYS matched, stoplist or not — if you name it, you
+#   want it. Name a stoplisted card only if you accept the false positives.
+#
+# NOTE ON BROAD FORMATS.
+#   `q: f:vintage` is ~25k cards and nearly everything ever printed; it will match almost
+#   every issue and tell you little. Prefer the narrow, high-signal slices:
+#     q: banned:vintage          q: restricted:vintage
+#     q: is:reserved             q: set:lea or set:leb or set:2ed
+#     q: f:premodern             q: year<=2003 -t:token
+#   Start narrow, widen if the backlog looks thin.
+
+# ---- pools ----
+q: year<=2003 -t:token -t:scheme -t:plane
+
+# ---- named cards (always matched) ----
+# One exact card name per line. Add with /backlog-add, which verifies the spelling
+# against Scryfall first — a misspelled name silently never matches, and the card
+# looks clean when it was simply never scanned.
+#
+# This is the right tool for format staples NEWER than any pool you track: a
+# Vintage or Legacy list is mostly old cards plus a handful of modern ones, so add
+# those few by name rather than pulling a 25k-card format pool.
+#
+# Black Lotus
+# Urza's Saga
+# Ragavan, Nimble Pilferer
+

@@ -58,6 +58,12 @@ compile anything and needs no lock.
 
 **Current holder:** `custom-format-2cd-review since 2026-09-13T00:40Z`
 
+> NOTE (tournament-rotation-overlap, 2026-09-13T05:18Z): this hold is ~4h38m
+> old with no PID and no estimate — far beyond even a full-suite run, so it is
+> suspected stale/abandoned. NOT clearing it per Rule 6 (a human call); flagging
+> for a human/the holder. A tournament-rotation-overlap Rust verification is
+> queued behind it. If `custom-format-2cd-review` is done, please release.
+
 Protocol — before running any compiling cargo command (`build`, `test`,
 `clippy`, `run`, anything that isn't `fmt`):
 

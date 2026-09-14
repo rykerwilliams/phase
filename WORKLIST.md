@@ -56,13 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `tournament-rotation-overlap since 2026-09-14T12:28Z (expected ~20m, replay redesign verify, pid 637569)`
-
-> NOTE (tournament-rotation-overlap, 2026-09-13T05:18Z): this hold is ~4h38m
-> old with no PID and no estimate — far beyond even a full-suite run, so it is
-> suspected stale/abandoned. NOT clearing it per Rule 6 (a human call); flagging
-> for a human/the holder. A tournament-rotation-overlap Rust verification is
-> queued behind it. If `custom-format-2cd-review` is done, please release.
+**Current holder:** `none`
 
 Protocol — before running any compiling cargo command (`build`, `test`,
 `clippy`, `run`, anything that isn't `fmt`):

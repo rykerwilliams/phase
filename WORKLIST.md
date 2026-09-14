@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** `tournament-rotation-overlap since 2026-09-14T12:28Z (expected ~20m, replay redesign verify, pid 637569)`
 
 > NOTE (tournament-rotation-overlap, 2026-09-13T05:18Z): this hold is ~4h38m
 > old with no PID and no estimate — far beyond even a full-suite run, so it is

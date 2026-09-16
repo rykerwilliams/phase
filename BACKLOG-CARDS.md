@@ -2,14 +2,14 @@
 
 > **Working this? Read [`OLD-CARD-RUNBOOK.md`](OLD-CARD-RUNBOOK.md) first**, or just run `/backlog-batch`.
 
-_Generated 2026-09-11 against `upstream/main` `aae840a2b` · 1110 open issues · watchlist resolves to 6595 cards_
+_Generated 2026-09-15 against `upstream/main` `14f0c4be5` · 1104 open issues · watchlist resolves to 6595 cards_
 
 **Do not hand-edit** — regenerate with `python3 backlog/scan.py`. To change what is tracked, edit `backlog/watchlist.txt`.
 
 | verdict | count | meaning |
 |---|---:|---|
-| **LIVE** | 107 | No signal that it is fixed. Best candidates. |
-| partial-coverage | 51 | Card appears in some test; nothing ties a fix to THIS issue. |
+| **LIVE** | 102 | No signal that it is fixed. Best candidates. |
+| partial-coverage | 52 | Card appears in some test; nothing ties a fix to THIS issue. |
 | CHECK-DIRECTION | 17 | A commit/test cites the issue — but a commit can cite an issue to **fix**, **defer**, be **blocked on**, or **file** it. Only the first means fixed. Run the direction check before believing this bucket. |
 
 ```bash
@@ -19,7 +19,7 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 ★ = a card you explicitly named in the watchlist.
 
 
-## LIVE — best candidates (107)
+## LIVE — best candidates (102)
 
 | issue | card(s) | title | labels |
 |---|---|---|---|
@@ -63,10 +63,8 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#3658](https://github.com/phase-rs/phase/issues/3658) | Mana Vault (1997) | Mana Vault (paying even though its not tapped) — I think when i first summoned the card I ta... | status:needs-repro, area:engine, priority:p3-card-specific |
 | [#5273](https://github.com/phase-rs/phase/issues/5273) | Squallmonger (1999) | Squallmonger — Cool card played by the AI. | status:needs-repro, area:ai, priority:p4-ui-polish |
 | [#7742](https://github.com/phase-rs/phase/issues/7742) | Need for Speed (2001) | need for speed | status:confirmed, area:engine |
-| [#8804](https://github.com/phase-rs/phase/issues/8804) | Blizzard (1995) | [Card Bug] Blizzard Brawl snow-conditional buff lands on the wrong creature | status:needs-triage |
-| [#8798](https://github.com/phase-rs/phase/issues/8798) | Tainted Pact (2001) | ChangeZone{target: ParentTarget} re-binds to the source object when its producing parent pro... | — |
+| [#8840](https://github.com/phase-rs/phase/issues/8840) | Skirk Drill Sergeant (2003) | Skirk Drill Sergeant: failed {2}{R} payment reanimates the dying Goblin | — |
 | [#8751](https://github.com/phase-rs/phase/issues/8751) | Apocalypse (1997) | Golbez, Crystal Collector, Apocalypse Demon, Consuming Aberration End Step Trigger BUG | status:needs-triage |
-| [#8738](https://github.com/phase-rs/phase/issues/8738) | City of Traitors (1998) | [Card Bug] City of Traitors misses land-play trigger after Cavern of Souls choice | — |
 | [#8590](https://github.com/phase-rs/phase/issues/8590) | Safeguard (1997) | Brokers' Safeguard reports supported=true/gap_count=0 while swallowing the exile, the return... | — |
 | [#8526](https://github.com/phase-rs/phase/issues/8526) | Coral Fighters (1996), Sealed Fate (1996) | parser: "defending player's" and "target opponent's" library reads bind the controller (Cora... | — |
 | [#8493](https://github.com/phase-rs/phase/issues/8493) | Cataclysm (1998) | Sin, Unending Cataclysm — [[Sin, Unending Cataclysm]] does not give the option to remove cou... | status:needs-triage |
@@ -95,17 +93,15 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#5487](https://github.com/phase-rs/phase/issues/5487) | Jet Medallion (1997), Land Tax (1995), Phyrexian Tower (1998) | Stuck decision: ModalFaceChoice | status:confirmed, area:engine, area:frontend |
 | [#4554](https://github.com/phase-rs/phase/issues/4554) | Windborn Muse (2003) | Stuck decision: CombatTaxPayment | status:confirmed, area:engine, area:frontend |
 | [#7456](https://github.com/phase-rs/phase/issues/7456) | Song of Blood (1997) | Parser: CreateDelayedTrigger's hand-set `uses_tracked_set: false` leaves 9 cards' inner trac... | status:confirmed, area:engine, area:parser |
-| [#5678](https://github.com/phase-rs/phase/issues/5678) | Aladdin's Lamp (1995), Mangara's Tome (1996), Words of War (2002) | Alms Collector: 'would draw two or more cards' antecedent never parses to a Draw replacement... | status:confirmed, area:engine, area:parser |
 | [#774](https://github.com/phase-rs/phase/issues/774) | Vanishing (1997) | Does not recognize time counters as targets for proliferate — [[Kilo, Apogee Mind]] with [[D... | status:confirmed, area:engine, priority:p3-card-specific |
 | [#3671](https://github.com/phase-rs/phase/issues/3671) | Inspirit (2002) | Simulacrum Synthesizer — **Steps to Reproduce:** I had **Simulacrum Synthesizer** on the bat... | status:needs-repro, area:engine, priority:p3-card-specific |
 | [#6659](https://github.com/phase-rs/phase/issues/6659) | Feedback (1997) | Deck builder copy-limit affordance: alias spellings counted separately, search-add ungated | status:confirmed, area:engine, area:deckbuilder |
 | [#6463](https://github.com/phase-rs/phase/issues/6463) | Fyndhorn Elves (1995) | Declare Attackers — The game asks me if I would like to attack when I have no eligible attac... | status:confirmed, area:engine, area:frontend |
 | [#7739](https://github.com/phase-rs/phase/issues/7739) | Massacre (2000) | Toski, Bearer of Secrets | status:confirmed, area:engine |
-| [#8799](https://github.com/phase-rs/phase/issues/8799) | Free-for-All (1998), Tainted Pact (2001) | UntilStopConditions repeat with a starved producer should be a draw (CR 104.4b), not silent ... | — |
+| [#8862](https://github.com/phase-rs/phase/issues/8862) | Planar Guide (2003) | Tracked-set returns are silently dropped for singular ChangeZone delayed triggers | — |
 | [#8785](https://github.com/phase-rs/phase/issues/8785) | Override (2003) | [Card Bug] Weathered Sentinels: attack permission is parsed as a Defender grant | — |
 | [#8741](https://github.com/phase-rs/phase/issues/8741) | Fickle Efreet (2000), Rogue Skycaptain (1996), Rohgahh of Kher Keep (1994) | Akroan Horse: ETB chooses an opponent but fails to transfer control | — |
 | [#8707](https://github.com/phase-rs/phase/issues/8707) | Contamination (1998) | check-parser-combinators.sh silently skips its own seam suite when the suite or python3 is a... | — |
-| [#8701](https://github.com/phase-rs/phase/issues/8701) | Kaervek's Spite (1997) | parse_additional_cost_line turns an unreadable cost into no cost, making three spells castab... | — |
 | [#8653](https://github.com/phase-rs/phase/issues/8653) | Feedback (1997) | P2P hosting fails on Linux desktop: WebKitGTK's enable-webrtc defaults to false and wry neve... | — |
 | [#8584](https://github.com/phase-rs/phase/issues/8584) | Helm of Obedience (1996), Hungry Hungry Heifer (1998), Inheritance (1996) +1 | Sacrifice{SelfRef} inherits the parent instruction's object target and sacrifices the wrong ... | — |
 | [#8449](https://github.com/phase-rs/phase/issues/8449) | Reflexes (2003) | Taskmaster, Mercenary Mimic — able to copy a creature on the battlefield | status:needs-triage |
@@ -115,7 +111,6 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#7891](https://github.com/phase-rs/phase/issues/7891) | Timberwatch Elf (2003) | Thranduil, the elven king not showing all activated abilities of all elf cards in your grave... | status:needs-triage |
 | [#7864](https://github.com/phase-rs/phase/issues/7864) | Krosan Tusker (2002) | Ellie and Alan, Paleontologists — The Active Abillity of the Card is not working. | status:needs-triage |
 | [#7789](https://github.com/phase-rs/phase/issues/7789) | Disappear (1999) | [Card Bug] Cannot properly cash-in Storage Land counters | status:needs-triage |
-| [#7785](https://github.com/phase-rs/phase/issues/7785) | Mobilize (1997) | [Card Bug] Zurgo Thunder's Decree does not work as intended | status:needs-triage |
 | [#7619](https://github.com/phase-rs/phase/issues/7619) | Necromancy (1997) | Necromany targetting Worldspine wurm — Worldspine Wurm is discarded on cleanup step of my turn. | status:needs-triage |
 | [#7610](https://github.com/phase-rs/phase/issues/7610) | Lightning Greaves (2003) | [Card Bug] Monk gyatso airbend | status:needs-triage |
 | [#7521](https://github.com/phase-rs/phase/issues/7521) | Opportunity (2001) | AI crews a Vehicle with every creature it controls, then declares no attackers | — |
@@ -131,7 +126,7 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#2816](https://github.com/phase-rs/phase/issues/2816) | Terminate (2001) | feat(engine): multi-match Ripple — cast all same-named revealed cards (CR 702.60a) | area:engine |
 | [#1148](https://github.com/phase-rs/phase/issues/1148) | Lightning Greaves (2003), Mask of Memory (2003) | Sigarda's Aid + Cloud, Ex-SOLDIER memory issue? — im not exactly sure what caused it, nor ca... | status:needs-runtime-verify, area:engine, priority:p0-panic |
 
-## Partial coverage — verify what the test asserts (51)
+## Partial coverage — verify what the test asserts (52)
 
 | issue | card(s) | title | labels |
 |---|---|---|---|
@@ -182,6 +177,7 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 | [#8400](https://github.com/phase-rs/phase/issues/8400) | Exploration (1998) | Wildgrowth Walker — Wildgrowth Walker not adding additional life and adding +1/+1 counters t... | status:needs-triage |
 | [#8261](https://github.com/phase-rs/phase/issues/8261) | Awesome Presence (1996), Graxiplon (2002), Mana Leak (2003) +4 | Parser: fold the unless-clause payer-subject onto a single authority | — |
 | [#8003](https://github.com/phase-rs/phase/issues/8003) | Lightning Bolt (1995) | Action-worded mill trigger binds "it" to the milled card instead of the trigger source (wron... | — |
+| [#7785](https://github.com/phase-rs/phase/issues/7785) | Mobilize (1997) | [Card Bug] Zurgo Thunder's Decree does not work as intended | status:needs-triage |
 | [#7587](https://github.com/phase-rs/phase/issues/7587) | Formation (1995), Wall of Blossoms (1998) | Creatures with Defender are listed in valid_attacker_ids at DeclareAttackers (v0.59.0) | — |
 | [#7509](https://github.com/phase-rs/phase/issues/7509) | Library of Leng (1997) | A parked CR 616.1 replacement choice is destroyed by the spell's own CR 608.2n graveyard move | — |
 | [#7481](https://github.com/phase-rs/phase/issues/7481) | Oubliette (1993) | Event-less effect heads publish an empty tracked set: DoublePTAll (God-Eternal Rhonas) and s... | — |

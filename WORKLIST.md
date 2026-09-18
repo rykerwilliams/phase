@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** `onstack-3a since 2026-09-18T19:33Z (expected ~60m, re-verify phase 3a on rebased base)`
 
 Protocol — before running any compiling cargo command (`build`, `test`,
 `clippy`, `run`, anything that isn't `fmt`):

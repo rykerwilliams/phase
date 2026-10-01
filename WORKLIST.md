@@ -58,6 +58,18 @@ compile anything and needs no lock.
 
 **Current holder:** `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`
 
+> **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
+> This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`
+> for ~66 hours. Evidence it is abandoned rather than slow: the holder string carries **no PID**,
+> so Rule 6's `kill -0` check cannot be run; no session named `36e2b430-8911-r8` is alive
+> (`ListAgents` shows only `phase-64`, `phase-10`, `phase-76`); and no `cargo`/`rustc` process
+> is running in any phase checkout. The preceding `r7`/`r7verify` claims all have matching
+> releases, so this track normally cycles the row — `r8` appears to have ended mid-run.
+> Per Rule 6 I am **not** clearing it; a human should decide. Note that the machine-wide
+> `flock /tmp/claude-1000/cargo.lock` convention (agreed 2026-09-21) now provides the actual
+> CPU-contention protection this row was created for.
+
+
 Protocol — before running any compiling cargo command (`build`, `test`,
 `clippy`, `run`, anything that isn't `fmt`):
 

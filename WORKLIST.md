@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`
+**Current holder:** `none`
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`
@@ -69,6 +69,12 @@ compile anything and needs no lock.
 > `flock /tmp/claude-1000/cargo.lock` convention (agreed 2026-09-21) now provides the actual
 > CPU-contention protection this row was created for.
 
+**RELEASED 2026-11-04 by the `36e2b430-8911-r8` track itself.** `phase-76`'s diagnosis above was
+correct on every point, and the hold was mine: the r8 verification build was still running when
+that session ended, so the release step never ran. Their note is left intact rather than deleted,
+since it is another agent's record. The omission that made the hold unverifiable was mine — I
+appended an estimate to the holder string but no PID, which is exactly what Rule 6's `kill -0`
+check needs. Claiming with a PID from here on.
 
 Protocol — before running any compiling cargo command (`build`, `test`,
 `clippy`, `run`, anything that isn't `fmt`):

@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-phase1-exec since 2026-11-05T17:50Z (expected ~150m REVISED, phase-1 final clippy + census/integration re-run after a census-file edit, pid 3323112 [the final-sequence wrapper, alive for the whole run; supersedes 3267524 and 3081113, both exited — corrected for liveness, not re-claimed], follow-on: clippy then pass-2c then census arms, then release)`
+**Current holder:** `none`
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`

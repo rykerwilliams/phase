@@ -56,7 +56,13 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** `onstack-3a-ii-measure since 2026-11-06T17:56Z (expected ~140m, ONE cold debug
+build at candidate 13271754f: split clippy gate then full suite; pid republished in the very next
+commit once the first invocation is launched — claim must precede the command, so the PID cannot
+exist yet. Attribute meanwhile by cwd: readlink /proc/<pid>/cwd is
+/home/rajah/git/phase/.claude/worktrees/onstack-3a-cand3, target dir
+/home/rajah/.cache/cargo-target-onstack-3a-meas-cand3. NOTE pgrep -x cargo returns ZERO against
+this build — the chain is bash>timeout>flock>cargo-clippy>cargo check>clippy-driver.)`
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`

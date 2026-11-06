@@ -58,8 +58,9 @@ compile anything and needs no lock.
 
 **Current holder:** `onstack-3a-ii-phase1-fix since 2026-11-06T09:23Z (expected ~150m: CI's two
 clippy invocations + census arms + 4 single-test runs + full suite, warm target dir but a core
-types/game_state.rs edit so engine and all dependents rebuild; pid to follow in the next commit —
-attribute by cwd meanwhile: readlink /proc/<pid>/cwd is
+types/game_state.rs edit so engine and all dependents rebuild; pid 442636 — ONE supervising bash
+process, stable across all 10 cargo invocations, so `kill -0 442636` is the live check. Corroborate
+by cwd: readlink /proc/<pid>/cwd is
 /home/rajah/git/phase/.claude/worktrees/onstack-3a, target dir
 /home/rajah/.cache/cargo-target-onstack-3a)`
 

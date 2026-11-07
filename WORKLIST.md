@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-fix4 since 2026-11-07T02:05Z (expected ~95m, clippy x2 + full suite, pid 2345355 — PER-LEG flock, so the machine-wide lock frees at every leg boundary and a peer can interleave without waiting out the pass)`
+**Current holder:** `(free)`
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`

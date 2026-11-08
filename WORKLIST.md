@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-completion since 2026-11-07T06:05Z (expected ~80m, FULL cargo test suite at candidate 487143518 — the charter-required completion signal, deferred three rounds and now being settled; single leg, so the lock is held for the whole pass rather than freed at leg boundaries)`
+**Current holder:** `onstack-3a-ii-r8 since 2026-11-07T08:05Z (expected ~30m, census budget-invariance measurement then round-8 fix gates at candidate 487143518. The completion suite that previously held this row FINISHED: 72 test-result lines, 3 failures, all three adjudicated as not-this-phase — two stale-card-data.json deserialization errors and one load-dependent flake on a wall-clock-deadline-bounded AI search path, which is green both alone and across its whole crate suite alone)`
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`

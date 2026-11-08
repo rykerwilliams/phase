@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-r8 since 2026-11-07T08:05Z (expected ~30m, census budget-invariance measurement then round-8 fix gates at candidate 487143518. The completion suite that previously held this row FINISHED: 72 test-result lines, 3 failures, all three adjudicated as not-this-phase — two stale-card-data.json deserialization errors and one load-dependent flake on a wall-clock-deadline-bounded AI search path, which is green both alone and across its whole crate suite alone)`
+**Current holder:** `onstack-3a-ii-r10 since 2026-11-08T05:30Z (expected ~75m, round-10 fix gates at candidate 2d28b405b: census arms on the single integration target, cargo clippy -p phase-engine --test integration -D warnings (~28m, measured at the prior candidate), plus the tests covering game/stack.rs and ai_support edits. Round 8's comment-only transfer argument does NOT apply this round — the diff touches engine source. Rounds 8/9 released this row between legs; if this hold looks expired, the flock at /tmp/claude-1000/cargo.lock is the real protection and queued-behind-it is normal, not stuck)`
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`

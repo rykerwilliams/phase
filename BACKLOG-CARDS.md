@@ -19,14 +19,13 @@ git log -1 --format='%b' <sha> | grep -B2 -A3 '#<N>\b'   # the direction check
 ★ = a card you explicitly named in the watchlist.
 
 
-## LIVE — best candidates (135)
+## LIVE — best candidates (134)
 
 | issue | card(s) | title | labels |
 |---|---|---|---|
 | [#6389](https://github.com/phase-rs/phase/issues/6389) | Goblin Sharpshooter (2002) | goblin sharpshooter — Doesn't untap when someone's commander dies Here's why it should (Than... | status:needs-runtime-verify, area:engine, priority:p1-core-mechanic |
 | [#8115](https://github.com/phase-rs/phase/issues/8115) | Extortion (1999) | Temporal Extortion — doesn't grant an extra turn even when uncountered; also broken in PvP | status:confirmed, area:engine, priority:p2-wrong-game-result |
 | [#6862](https://github.com/phase-rs/phase/issues/6862) | Reclamation (1995) | esper's to magicite allows any card to become an artifact not just a creature — AI just exil... | status:confirmed, area:engine, area:ai |
-| [#6508](https://github.com/phase-rs/phase/issues/6508) | Citadel of Pain (2000) | Citadel of Pain — damages its controller instead of opponents | status:confirmed, area:engine, area:parser |
 | [#6395](https://github.com/phase-rs/phase/issues/6395) | Nicol Bolas (1995) | Nicol Bolas, Dragon God draws a card for the +1 but exiles at random from your hand for each... | status:confirmed, area:engine, area:parser |
 | [#4784](https://github.com/phase-rs/phase/issues/4784) | Nicol Bolas (1995) | Nicol Bolas, Planeswalker — I used Nicol Bolas Ult on the AI bot, and it did 7 damage to the... | status:confirmed, area:parser, priority:p2-wrong-game-result |
 | [#4732](https://github.com/phase-rs/phase/issues/4732) | Instigator (1999) | Firkraag, Cunning Instigator is taking counters and card draw illegally — The +1/+1 and card... | status:confirmed, area:parser, priority:p2-wrong-game-result |

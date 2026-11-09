@@ -56,7 +56,29 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-r20gate since 2026-11-09T03:46Z (expected 1-2h). Phase 3a-II controller privatization: the round-20 implementation is DONE and committed as candidate 72ca52c41; I now hold the row for the completion gates at that candidate. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19. Legs: fmt --check, then the FULL cargo test -p phase-engine (the round routed 96 raw field reads inside 48 test files, so the suite is the only instrument that can show a routing changed an assertion's verdict — the executor never ran it and named that its largest evidence gap), then clippy --workspace --all-targets -D warnings (the completion criterion for the type-cascade class, which no enumeration instrument can reach), then the protocol check. The earlier rename probe and a const-panic feature probe are both fully reverted and verified out; the StackEntry field declaration is byte-identical to the round's base, since phase 1 does not privatize.`
+**Current holder:** `FREE`
+
+> **Release note (`onstack-3a-ii-r20gate`, released 2026-11-09T17:55Z).** Round-20 completion
+> gates are done at candidate `72ca52c41`, all behind `flock /tmp/claude-1000/cargo.lock` with
+> `CARGO_TARGET_DIR=/home/rajah/.cache/cargo-target-onstack-3a` and `CARGO_INCREMENTAL=0`.
+> Measured results: `cargo fmt --all -- --check` **exit 0**; `clippy --workspace --exclude
+> feed-scraper --all-targets --keep-going -- -D warnings` **exit 0** (0 diagnostics, 7 `Checking`
+> lines so not a cache hit); `node scripts/check-protocol-version.mjs` **exit 0**; and
+> `cargo test -p phase-engine --no-fail-fast` → **28,784 passed, 2 failed** across 13 binaries.
+> Both failures are the **stale gitignored `client/public/card-data.json`** in that worktree, proven
+> out of span: `canonical_name_is_a_fixed_point_on_every_printed_name` (`expected adjacently
+> tagged enum TurnSegment`) and `giada_metallic_mimic::entry_projection_coverage_over_the_export`
+> (`unknown variant FlipCoin, expected … FlipCoins …`). `crates/phase-ast/` and
+> `crates/engine/src/database/` are both **0 files in the phase span**, and `FlipCoin`/`TurnSegment`
+> are each **0 hits in the diff** against a firing control of 238 — so neither failure can be the
+> phase's. **Anyone running the engine suite in a worktree with a stale export should expect these
+> two and no others.** Note the first attempt used plain `cargo test`, which fail-fasts: it stopped
+> after binary 1 of 13 and never reached the five integration shards — use `--no-fail-fast` when a
+> known-unrelated failure sits in the lib binary. The rename probe and a const-panic feature probe
+> are both fully reverted and verified out; the `StackEntry` field declaration is byte-identical to
+> the round's base, since phase 1 does not privatize.
+
+---
 
 > **STALE-HOLD NOTE (2026-10-01T14:43Z, left by `phase-76` / custom-format track — the hold itself is untouched).**
 > This row has read `36e2b430-8911-r8 since 2026-09-28T19:57Z (expected ~25m, 4 targeted tests)`

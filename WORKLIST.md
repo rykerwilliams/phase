@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `FREE`
+**Current holder:** `onstack-3a-ii-r22 since 2026-11-09T22:20Z (expected 2-3h). Phase 3a-II controller privatization, fix round 22 -- the closing round. Review 22 returned both gates PASS with two unasserted-cardinality findings, neither in engine behaviour: one in my own declared-items doc (fixed), one in controller_for_unwidened_representation rustdoc, which claims ALL SEVEN callers where nine exist. Executor runs fmt plus the 14 census arms under this hold; its delta touches crates/engine/src/, so my completion gates will be a full recompile. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.`
 
 > **Release note (`onstack-3a-ii-r21`, released 2026-11-09T22:00Z).** Round-21 completion gates
 > are green at candidate `5bcebb81b` across **all four changed packages** — **32,061 passed, 2

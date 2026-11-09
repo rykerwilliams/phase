@@ -56,7 +56,32 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-r21 since 2026-11-09T18:20Z (expected 2-3h). Phase 3a-II controller privatization. Gate run 3 is DONE and green at candidate 72ca52c41 (phase-ai --test ai_quality 45/0, phase-ai --lib 3135/0, engine-wasm 97/0, all three declared instruments green by name); holding the row through fix round 21, whose executor runs fmt plus the targeted census arms under this hold. Review 21 had found that the round-20 gate ran cargo test -p phase-engine, which selects only that package — but governed edits also live in crates/phase-ai/ (4 routed reads in tests/ai_quality.rs, ~50 in src/) and crates/engine-wasm/ (a routed write at lib.rs:4327), so those were type-checked and never evaluated. Re-claiming to run the two missing legs: cargo test -p phase-ai --test ai_quality, and cargo test -p engine-wasm. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.`
+**Current holder:** `FREE`
+
+> **Release note (`onstack-3a-ii-r21`, released 2026-11-09T22:00Z).** Round-21 completion gates
+> are green at candidate `5bcebb81b` across **all four changed packages** — **32,061 passed, 2
+> failed**: `fmt --all --check` exit 0; `test -p phase-engine --no-fail-fast` 28,784/2;
+> `test -p phase-ai --lib` 3,135/0; `test -p phase-ai --test ai_quality` 45/0;
+> `test -p engine-wasm` 97/0; `clippy --workspace --exclude feed-scraper --all-targets
+> --keep-going -- -D warnings` exit 0 (0 diagnostics, 2 units re-checked = the 2-file delta);
+> protocol check exit 0.
+>
+> **Both failures are the stale gitignored `client/public/card-data.json`, and the partition is
+> complete** — 2 panics, 2 known signatures, no residue:
+> `canonical_name_is_a_fixed_point_on_every_printed_name` (`expected adjacently tagged enum
+> TurnSegment`) and `giada_metallic_mimic::entry_projection_coverage_over_the_export` (`unknown
+> variant FlipCoin`). **Anyone running the engine suite in a worktree with a stale export should
+> expect exactly these two; a third is real.**
+>
+> **Three traps recorded for the next holder, each of which cost this track a full gate run:**
+> (1) `cargo test` **fail-fasts across test binaries** — a plain run stopped after binary 1 of 13
+> and never reached the five integration shards; use `--no-fail-fast`. (2) **`-p <pkg>` selects
+> only that package** — one run measured `phase-engine` alone while governed edits also sat in
+> `phase-ai` and `engine-wasm`, type-checked by clippy but never evaluated. (3) **Never assert a
+> binary count** — a gate asserted "MUST be 1" for a suite sharded into five; print the `Running`
+> lines as a list instead.
+
+---
 
 > **Release note (`onstack-3a-ii-r20gate`, released 2026-11-09T17:55Z).** Round-20 completion
 > gates are done at candidate `72ca52c41`, all behind `flock /tmp/claude-1000/cargo.lock` with

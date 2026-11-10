@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`handle_opponent_may_choice_inner` change, so phase 1 builds phase-engine --lib --tests once, then the issue rows + --lib, then an 11-filter class sweep across integration + shards 2-5 (the re-offer changes behaviour for every AnyPlayer/AnyOtherPlayer poll). All behind flock /tmp/claude-1000/cargo.lock, nice -n 19, -j 2.`
+**Current holder:** `onstack-3a-ii-r23gate since 2026-11-10T05:55Z (expected 3-4h). Phase 3a-II controller privatization, round-23 COMPLETION GATES at candidate de169e6ae. Seven legs: fmt --all --check, then test -p phase-engine / -p phase-ai --lib / -p phase-ai --test ai_quality / -p engine-wasm (all --no-fail-fast), then clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings, then the protocol check. Round 23 touched crates/engine/src/types/game_state.rs (comment-only, measured), so clippy is a full downstream recheck rather than a 2-unit one. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.`
 
 > **Release note (`onstack-3a-ii-r22`, released 2026-11-10T02:10Z).** Round-22 completion gates
 > are green at candidate `44481c5a7` across **all four changed packages** — **32,061 passed, 2

@@ -56,7 +56,47 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-r23gate since 2026-11-10T05:55Z (expected 3-4h). Phase 3a-II controller privatization, round-23 COMPLETION GATES at candidate de169e6ae. Seven legs: fmt --all --check, then test -p phase-engine / -p phase-ai --lib / -p phase-ai --test ai_quality / -p engine-wasm (all --no-fail-fast), then clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings, then the protocol check. Round 23 touched crates/engine/src/types/game_state.rs (comment-only, measured), so clippy is a full downstream recheck rather than a 2-unit one. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.`
+**Current holder:** `none`
+
+> **Release note (`onstack-3a-ii-r23gate`, released 2026-11-10T08:15Z).** Round-23 completion
+> gates are green at candidate `de169e6ae` across **all four changed packages** — **32,061
+> passed, 2 failed**: `fmt --all -- --check` exit 0 (99s); `test -p phase-engine
+> --no-fail-fast` 28,784/2 (4080s); `test -p phase-ai --lib` 3,135/0 (453s); `test -p phase-ai
+> --test ai_quality` 45/0 (53s); `test -p engine-wasm` 97/0 (283s); `clippy --workspace
+> --exclude feed-scraper --all-targets --keep-going -- -D warnings` exit 0 (2740s, **0
+> diagnostics, 11 units re-checked**); protocol check exit 0.
+>
+> **Every counted figure is identical to round 22's**, and that identity is the result rather
+> than a coincidence: round 23's delta was comment-only in
+> `crates/engine/src/types/game_state.rs` plus census prose, one new predicate, and one reach
+> guard — nothing that can move a test total, so a *changed* total would have been the finding.
+> The 11 clippy units are the same eleven **by name** (`phase-engine` among them, which is the
+> check that matters — `game_state.rs` was touched, and `checked_units=0` would have been a
+> cache hit reading as a pass). The 13 reach entries (12 test binaries + `Doc-tests`) are also
+> unchanged, so the shorter wall clock (engine 4080s vs 6075s, clippy 2740s vs 3875s) is a warm
+> target dir and not reduced work.
+>
+> **Both failures are the stale gitignored `client/public/card-data.json`, and the partition is
+> complete** — exactly 2 `... FAILED` lines (control: the pattern fires on a synthetic line),
+> 2 known signatures, no third:
+> `database::card_db::tests::canonical_name_is_a_fixed_point_on_every_printed_name`
+> (`expected adjacently tagged enum TurnSegment`, `--lib`) and
+> `giada_metallic_mimic::entry_projection_coverage_over_the_export` (`unknown variant
+> FlipCoin`, `--test integration_3`). Neither panic message mentions `controller`,
+> `StackEntry`, or any identifier this phase touches. Counted **by name**, not as a bare
+> total, because an expected failure count is scope-dependent: 2 for the full package, 0 for a
+> `--test integration` run alone. **Not regenerated on purpose** — `gen-card-data.sh` rewrites
+> three *tracked* catalogs and other agents are live.
+>
+> The engine leg's `^error` count of 3 is **enumerated, not counted**, and decomposes entirely
+> into cargo's test-failure epilogue (`test failed … --lib`, `test failed … --test
+> integration_3`, `2 targets failed:`) — zero compilation errors in any leg.
+>
+> Target dir `/home/rajah/.cache/cargo-target-onstack-3a` left intact and reused (never
+> `cargo clean`, never `cargo-sweep`). Every invocation ran behind `flock
+> /tmp/claude-1000/cargo.lock` at `nice -n 19` with `CARGO_INCREMENTAL=0`.
+
+---
 
 > **Release note (`onstack-3a-ii-r22`, released 2026-11-10T02:10Z).** Round-22 completion gates
 > are green at candidate `44481c5a7` across **all four changed packages** — **32,061 passed, 2

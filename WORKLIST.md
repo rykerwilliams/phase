@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** phase1-9397-verify since 2026-11-10T18:52Z (expected ~15m, lobby-broker test + clippy only, verifying PR #9397 blocker fix; releasing back to onstack-3a-ii-r25gate after)
+**Current holder:** none
 
 Last held by onstack-3a-ii-r25gate, released 2026-11-10T18:55Z after the round-25 seven-leg completion gate at candidate `72d99f9a5` (ran 11:23-13:50 local, driver pid 2925612, all seven legs reported). Results, for anyone who hits the same signatures: fmt 0; **phase-engine 28,784 passed / 2 failed** — the two failures are the pre-existing stale gitignored `client/public/card-data.json` export (`database::card_db::tests::canonical_name_is_a_fixed_point_on_every_printed_name` and `giada_metallic_mimic::entry_projection_coverage_over_the_export`), **not anyone's diff**; phase-ai `--test ai_quality` 45/0; engine-wasm 97/0; **clippy 0 diagnostics across all 11 workspace units**; protocol check 0.
 

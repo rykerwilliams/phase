@@ -56,7 +56,37 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-r22 since 2026-11-09T22:20Z (expected 2-3h). Phase 3a-II controller privatization, fix round 22 -- the closing round. Review 22 returned both gates PASS with two unasserted-cardinality findings, neither in engine behaviour: one in my own declared-items doc (fixed), one in controller_for_unwidened_representation rustdoc, which claims ALL SEVEN callers where nine exist. Executor runs fmt plus the 14 census arms under this hold; its delta touches crates/engine/src/, so my completion gates will be a full recompile. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.`
+**Current holder:** `none`
+
+> **Release note (`onstack-3a-ii-r22`, released 2026-11-10T02:10Z).** Round-22 completion gates
+> are green at candidate `44481c5a7` across **all four changed packages** — **32,061 passed, 2
+> failed**: `fmt --all -- --check` exit 0 (115s); `test -p phase-engine --no-fail-fast` 28,784/2
+> (6075s); `test -p phase-ai --lib` 3,135/0 (684s); `test -p phase-ai --test ai_quality` 45/0
+> (77s); `test -p engine-wasm` 97/0 (440s); `clippy --workspace --exclude feed-scraper
+> --all-targets --keep-going -- -D warnings` exit 0 (3875s, **0 diagnostics, 11 units
+> re-checked** — round 21 re-checked 2, because that delta was two test files while this one
+> touches `crates/engine/src/types/game_state.rs` and forces the downstream recheck); protocol
+> check exit 0.
+>
+> **Both failures are the stale gitignored `client/public/card-data.json`, and the partition is
+> complete** — 2 panics, 2 known signatures, no residue:
+> `database::card_db::tests::canonical_name_is_a_fixed_point_on_every_printed_name`
+> (`expected adjacently tagged enum TurnSegment`) and
+> `giada_metallic_mimic::entry_projection_coverage_over_the_export`
+> (`unknown variant FlipCoin`). Both proven out-of-span against firing controls; the export is
+> gitignored, so its bytes do not vary with the commit. **Not regenerated on purpose** —
+> `gen-card-data.sh` rewrites three *tracked* catalogs and other agents are live.
+>
+> The engine leg's `^error` count of 3 decomposes into cargo's test-failure epilogue
+> (`test failed … --lib`, `test failed … --test integration_3`, `2 targets failed:`) and is
+> byte-identical to round 21's — no compilation error in any leg, and every leg's binary list
+> is non-empty, so no leg reads as a pass by never having run.
+>
+> Target dir `/home/rajah/.cache/cargo-target-onstack-3a` left intact and reused (never
+> `cargo clean`, never `cargo-sweep`). Every invocation ran behind `flock
+> /tmp/claude-1000/cargo.lock` at `nice -n 19` with `CARGO_INCREMENTAL=0`.
+
+---
 
 > **Release note (`onstack-3a-ii-r21`, released 2026-11-09T22:00Z).** Round-21 completion gates
 > are green at candidate `5bcebb81b` across **all four changed packages** — **32,061 passed, 2

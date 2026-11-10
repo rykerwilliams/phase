@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** onstack-3a-ii-r25gate since 2026-11-10T11:55Z (expected 2-3h). Phase 3a-II controller privatization, round-25 seven-leg completion gate at candidate `72d99f9a5`. NOT comment-only this round, unlike round 24: the census test file gained a module-scope term-3 verdict (+223/-40), so test totals can legitimately move and clippy is a real downstream recheck. Legs, each its own `flock` invocation (never one flock around the script): fmt --all --check, test -p phase-engine / -p phase-ai --lib / -p phase-ai --test ai_quality / -p engine-wasm (all --no-fail-fast), clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings, protocol check. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, nice -n 19. Driver pid recorded in the gate summary header once launched.
 
 > **Release note (`onstack-3a-ii-r24`, released 2026-11-10T11:25Z).** Round-24 completion
 > gates are green at candidate `0ae69683c` across **all four changed packages** — **32,061

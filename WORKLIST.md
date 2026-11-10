@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** `fow-6301 (pid 1725398) since 2026-11-10T04:57Z (expected ~50-70m). PR #10741 round-2 review fix verification: shared `handle_opponent_may_choice_inner` change, so phase 1 builds phase-engine --lib --tests once, then the issue rows + --lib, then an 11-filter class sweep across integration + shards 2-5 (the re-offer changes behaviour for every AnyPlayer/AnyOtherPlayer poll). All behind flock /tmp/claude-1000/cargo.lock, nice -n 19, -j 2.`
 
 > **Release note (`onstack-3a-ii-r22`, released 2026-11-10T02:10Z).** Round-22 completion gates
 > are green at candidate `44481c5a7` across **all four changed packages** — **32,061 passed, 2

@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** onstack-3a-ii-r24 since 2026-11-10T09:05Z (expected 4-5h). Phase 3a-II controller privatization, round-24 verification then COMPLETION GATES. Round 24 is comment-only in four tracked src files (verified: 47 of 47 added lines carry a comment prefix, and stripping whole-line comments makes all four byte-identical to the round-23 candidate, with a firing cross-file control). Step 1, preparatory, before any commit: the 14 census arms via test -p phase-engine --test integration, because the round edits text inside the screened classification-tag head family. Only if green do I commit the candidate; then the seven-leg gate at that commit: fmt --all --check, test -p phase-engine / -p phase-ai --lib / -p phase-ai --test ai_quality / -p engine-wasm (all --no-fail-fast), clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings, protocol check. Four rustdoc edits land in crates/engine/src/types/game_state.rs, so clippy is a full downstream recheck of all 11 workspace units, not two. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.
 
 > **Release note (`onstack-3a-ii-r23gate`, released 2026-11-10T08:15Z).** Round-23 completion
 > gates are green at candidate `de169e6ae` across **all four changed packages** — **32,061

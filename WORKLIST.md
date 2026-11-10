@@ -56,7 +56,44 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** onstack-3a-ii-r24 since 2026-11-10T09:05Z (expected 4-5h). Phase 3a-II controller privatization, round-24 verification then COMPLETION GATES. Round 24 is comment-only in four tracked src files (verified: 47 of 47 added lines carry a comment prefix, and stripping whole-line comments makes all four byte-identical to the round-23 candidate, with a firing cross-file control). Step 1, preparatory, before any commit: the 14 census arms via test -p phase-engine --test integration, because the round edits text inside the screened classification-tag head family. Only if green do I commit the candidate; then the seven-leg gate at that commit: fmt --all --check, test -p phase-engine / -p phase-ai --lib / -p phase-ai --test ai_quality / -p engine-wasm (all --no-fail-fast), clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings, protocol check. Four rustdoc edits land in crates/engine/src/types/game_state.rs, so clippy is a full downstream recheck of all 11 workspace units, not two. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, every invocation behind flock /tmp/claude-1000/cargo.lock, nice -n 19.
+**Current holder:** `none`
+
+> **Release note (`onstack-3a-ii-r24`, released 2026-11-10T11:25Z).** Round-24 completion
+> gates are green at candidate `0ae69683c` across **all four changed packages** — **32,061
+> passed, 2 failed** (unit: the four changed packages summed; the `phase-engine`-only figure
+> for the same run is 28,784): `fmt --all -- --check` exit 0 (90s); `test -p phase-engine
+> --no-fail-fast` 28,784/2 (3966s); `test -p phase-ai --lib` 3,135/0 (451s); `test -p phase-ai
+> --test ai_quality` 45/0 (51s); `test -p engine-wasm` 97/0 (285s); `clippy --workspace
+> --exclude feed-scraper --all-targets --keep-going -- -D warnings` exit 0 (2785s, **0
+> diagnostics, 11 units re-checked and enumerated by name**); protocol check exit 0.
+>
+> The 2 failures are the stale gitignored `client/public/card-data.json` export, counted **by
+> name** and not as a total, because the expected count is scope-dependent (2 for the whole
+> package, 0 for `--test integration` alone):
+> `canonical_name_is_a_fixed_point_on_every_printed_name` (`expected adjacently tagged enum
+> TurnSegment`) and `giada_metallic_mimic::entry_projection_coverage_over_the_export`
+> (`unknown variant FlipCoin`). No third failure. `^error` = 3 lines, enumerated: two `test
+> failed, to rerun pass …` plus one `2 targets failed:` epilogue — **zero compile errors**.
+>
+> **Every counted figure is identical to round 23's**, and that identity is the result: round
+> 24's delta is comment-only across four tracked `src` files (47 added / 28 removed), so
+> nothing in it can move a test total and a *changed* total would have been the finding. Wall
+> clock fell slightly (engine 3966s vs 4080s) with reach identical on both axes — same 13
+> binaries, same 11 clippy units by name — so that is a warm target dir, not reduced work.
+>
+> Round-specific checks: 14/14 census arms by name; round 23's reach guard did **not** fire
+> (0, with its synthetic control at 1); `CTRL` tag arithmetic (matched with its trailing space,
+> so longer siblings cannot inflate it) unmoved at **150 occurrences**
+> over the four walked roots at both this candidate and `de169e6ae`; all four repairs proved by
+> the **removed** string's absence rather than the added string's presence.
+>
+> One gate check of mine was a non-measurement: F4's expectation was written `expect >=0` — a
+> tautology no tree can fail — over a one-line `grep -B1` window, while the citation sits three
+> lines above its anchor. Re-measured by hand over a 12-line contiguous-comment-run window with
+> `de169e6ae` as the negative control: 4/4 CR citations and 0 non-comment lines at the
+> candidate, 0/4 and 12 non-comment lines at the base. Repair confirmed, now proved.
+
+---
 
 > **Release note (`onstack-3a-ii-r23gate`, released 2026-11-10T08:15Z).** Round-23 completion
 > gates are green at candidate `de169e6ae` across **all four changed packages** — **32,061

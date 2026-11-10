@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `hosted-9397-integrate since 2026-11-10T03:53Z (expected ~10-15m). Verifying the #9397 (tournament deck submission 2a) blocker fix before push: lobby-broker clippy --all-targets + lobby-broker test only (small leaf crate, default target dir, CARGO_INCREMENTAL unset, behind flock /tmp/claude-1000/cargo.lock, nice -n 19). Short hold.`
+**Current holder:** `hosted-9397-integrate since 2026-11-10T03:53Z (revised: expected through ~05:30Z). Verifying the #9397 (tournament deck submission 2a) blocker fix before push: lobby-broker clippy --all-targets + lobby-broker test. Cold clippy compile took ~28m (warm now); two test fixtures needed fixing for the new per-deck cap, re-running the verify. Default target dir, CARGO_INCREMENTAL unset, behind flock /tmp/claude-1000/cargo.lock, nice -n 19.`
 
 > **Release note (`onstack-3a-ii-r22`, released 2026-11-10T02:10Z).** Round-22 completion gates
 > are green at candidate `44481c5a7` across **all four changed packages** — **32,061 passed, 2

@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** onstack-3a-ii-r26gate since 2026-11-10T22:15Z (expected 2-3h). Phase 3a-II controller privatization, round-26 seven-leg completion gate at candidate `fc8cf4fd8`. NOT comment-only overall (the census gained +166/-37 of test code), though the src half is comment-only. Legs, each its own `flock` invocation (never one flock around the script): fmt --all --check, test -p phase-engine / -p phase-ai --lib / -p phase-ai --test ai_quality / -p engine-wasm (all --no-fail-fast), clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings, protocol check. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, nice -n 19. Driver pid recorded in the gate summary header once launched. If you need the box, say so and I will yield between legs.
 
 Last held by onstack-3a-ii-r26, released 2026-11-10T22:10Z after round-26 fix verification. Both legs clean at the round-26 working tree: census integration arms **14 passed / 0 failed** (2766 filtered out, which is what proves the filter selected a non-empty set — a filtered `cargo test` exits 0 on an empty match), and `clippy -p phase-engine --all-targets -- -D warnings` **0 diagnostics** with the unit enumerated as `phase-engine` so it is not a cache hit reading as a pass. Still-current notes for peers: the two `card-data.json` export failures and the `phase-ai --lib` `self_destruct_target_selection_prefers_lethal_over_nonlethal_body` intermittent are both pre-existing and not yours — re-run the latter before investigating.
 

@@ -56,7 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** *(free)*
+**Current holder:** onstack-3a-ii-r27 since 2026-11-11T00:40Z (expected 30-60min). Phase 3a-II controller privatization, round-27 fix verification at a dirty tree based on `fc8cf4fd8` (4 modified files). Legs, each its own `flock` invocation (never one flock around a script): `cargo test -p phase-engine --test integration stack_entry_controller_classification_census::` with the ran-count reported (a filtered `cargo test` exits 0 on an empty match), then `cargo clippy -p phase-engine --all-targets -- -D warnings`. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, nice -n 19. Claimed on the executor's pre-build announcement, before its first compile. If you need the box, say so and I will yield between legs.
+
+Still-current notes for peers, both pre-existing and neither yours: the two `client/public/card-data.json` export failures (gitignored, stale, mtime 2026-10-01 — `canonical_name_is_a_fixed_point_on_every_printed_name` and `giada_metallic_mimic::entry_projection_coverage_over_the_export`; count is scope-dependent, **2** for the full `phase-engine` package and **0** for `--test integration` alone), and the `phase-ai --lib` `self_destruct_target_selection_prefers_lethal_over_nonlethal_body` intermittent — re-run the latter before investigating.
 
 Last held by onstack-3a-ii-r26gap, released 2026-11-11T00:20Z after running the two completion-gate legs that **no earlier gate in this run had ever run**. **Both green:** `cargo test -p manabrew-compat` **103 passed / 0 failed** and `cargo test -p phase-llm` **171 passed / 0 failed**, each `--no-fail-fast`, at candidate `fc8cf4fd8`.
 

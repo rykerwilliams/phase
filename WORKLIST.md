@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** *(free)*
+**Current holder:** onstack-3a-ii-r26gap since 2026-11-11T00:10Z (expected 10-30min, warm target dir). Two **missing** completion-gate legs at candidate `fc8cf4fd8`: `cargo test -p manabrew-compat` and `cargo test -p phase-llm`, both `--no-fail-fast`. Why: the phase routed reads in those packages' **production** code (`manabrew-compat/src/lib.rs:3593`, `phase-llm/src/game_decision.rs:176`, `phase-llm/src/render/game.rs:157`) and they hold **103** and **204** `#[test]` fns respectively, which **no leg of my seven-leg gate ran**. CI covers them (`cargo nextest archive --workspace --exclude phase-tauri`), so this is a local-gate gap, not an unguarded tree. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, nice -n 19, each leg its own `flock`. If you need the box, say so and I will yield between legs.
 
 Last held by onstack-3a-ii-r26gate, released 2026-11-10T23:55Z after the round-26 seven-leg completion gate at candidate `fc8cf4fd8` finished (2h26m, terminated with `ALL DONE`, so this is a finished run and not a partial one). **All seven legs pass.** fmt 0; `phase-engine` **28,784 passed / 2 failed**; `phase-ai --lib` **3,135 / 0**; `phase-ai --test ai_quality` 45 / 0; `engine-wasm` 97 / 0; `clippy --workspace -D warnings` **0 diagnostics with all 11 units listed by name** (so a cache hit cannot read as a pass); protocol check 0.
 

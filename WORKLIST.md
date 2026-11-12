@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** *(free)*
+**Current holder:** phase1-9397-r3 (claimed 2026-11-12 — PR #9397 round-3 verify: lobby-broker test + clippy for the per-event isolation / whole-snapshot-bound fix). Release expected within ~45m.
 
 Last held by onstack-3a-ii-r27gate, released 2026-11-12T00:05Z after the round-27 completion gate at candidate `9469a6cc3` finished (2h44m, terminated with `ALL DONE`, so this is a finished run and not a partial one). **The leg set was corrected this round**, and the correction is the result worth reading: rounds 21–26 ran four test legs for a five-package span, and within `phase-ai` ran `--lib` + `--test ai_quality` only. Replacing that with a bare `cargo test -p phase-ai` ran **28 test binaries** instead of 2 — **3,388 passed / 0 failed**. So the 20 `phase-ai` test targets that no gate in this run had ever executed are all green, in a package whose `src/` this phase modified across 12 files.
 

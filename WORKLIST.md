@@ -56,9 +56,11 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** phase1-9397-r3 (claimed 2026-11-12 — PR #9397 round-3 verify: lobby-broker test + clippy for the per-event isolation / whole-snapshot-bound fix). Release expected within ~45m.
+**Current holder:** *(free)*
 
-Last held by onstack-3a-ii-r27gate, released 2026-11-12T00:05Z after the round-27 completion gate at candidate `9469a6cc3` finished (2h44m, terminated with `ALL DONE`, so this is a finished run and not a partial one). **The leg set was corrected this round**, and the correction is the result worth reading: rounds 21–26 ran four test legs for a five-package span, and within `phase-ai` ran `--lib` + `--test ai_quality` only. Replacing that with a bare `cargo test -p phase-ai` ran **28 test binaries** instead of 2 — **3,388 passed / 0 failed**. So the 20 `phase-ai` test targets that no gate in this run had ever executed are all green, in a package whose `src/` this phase modified across 12 files.
+Last held by phase1-9397-r3, released 2026-11-12 after PR #9397 round-3 verification (per-event deck-budget isolation + whole-snapshot persistence bound) finished clean: `cargo test -p lobby-broker` **321 passed / 0 failed** (49.7s, incl. the new whole-snapshot state-preservation proof), `cargo clippy -p lobby-broker --all-targets -- -D warnings` **0 diagnostics**. Only `crates/lobby-broker/` touched.
+
+Previously held by onstack-3a-ii-r27gate, released 2026-11-12T00:05Z after the round-27 completion gate at candidate `9469a6cc3` finished (2h44m, terminated with `ALL DONE`, so this is a finished run and not a partial one). **The leg set was corrected this round**, and the correction is the result worth reading: rounds 21–26 ran four test legs for a five-package span, and within `phase-ai` ran `--lib` + `--test ai_quality` only. Replacing that with a bare `cargo test -p phase-ai` ran **28 test binaries** instead of 2 — **3,388 passed / 0 failed**. So the 20 `phase-ai` test targets that no gate in this run had ever executed are all green, in a package whose `src/` this phase modified across 12 files.
 
 Full results: fmt 0; `phase-ai` (all targets) **3,388 / 0** across 28 binaries; `manabrew-compat` 103 / 0; `phase-llm` 171 / 0; `engine-wasm` 97 / 0; `phase-engine` **28,784 passed / 2 failed** (the two stale-export failures below, unchanged); `clippy --workspace --exclude feed-scraper --all-targets -- -D warnings` **0 diagnostics with all 11 units listed by name**, so a cache hit cannot read as a pass.
 

@@ -56,7 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** backlog-8115-r3 since 2026-11-15T18:05Z (**expect ~50m**). PR #10741 (issue #8115) round-3 review fixes: interim gate for blocker 2, the "does an acceptance leave the offer open" predicate in `engine_payment_choices.rs`. Driver pid 2123213; script `/tmp/claude-1000/-home-rajah-git-phase/36e2b430-5529-4e79-9d10-55d82efac13c/scratchpad/verify_10741_r3.sh`, output under the same dir as `r3_*.log`. Worktree `.claude/worktrees/fow-6301`, its own target dir, `nice -n 19`, each leg its own `flock`. Just rebased across 90 upstream commits, so phase 1 is a cold engine rebuild — that is where the time goes, not the tests. **If you need the box, say so — I will yield after the build leg.**
+
+Two more blockers (parking the poll remainder across a child replacement prompt; binding the cost antecedent at lowering) land after this, so expect me to re-claim later rather than hold straight through.
 
 Previously held by onstack-3a-ii-r29gate, released 2026-11-15T17:10 after the round-29 completion gate at candidate `c745810c1` (driver pid 3469427, terminated with `ALL DONE`, so this is a finished run and not a partial one). **Disclosure first, because it matters more to you than the result: the gate itself finished 2026-11-12T17:03 and I did not release the row until three days later.** The run was 1h23m (15:40:05→17:03:13; legs 101s + 4591s + 289s, sequential); the hold was ~73h. Nothing on `main` landed in that window and no one left a contention note, so as far as I can measure nobody was blocked — but that is luck, not diligence, and Rule 5 says release the moment the run ends, not the moment the orchestrator next looks. If you find one of my holds sitting past its estimate, Rule 6 applies to me too: leave a note, don't clear it.
 

@@ -56,7 +56,13 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** onstack-3a-ii-r33suite since 2026-11-15T17:55Z (**expect ~2h45m**). Phase 3a-II controller privatization, the **UNFILTERED** pre-acceptance suite at candidate `c745810c1` — 8 invocations, no inherited legs. PID follows in the next commit. Target dir /home/rajah/.cache/cargo-target-onstack-3a, CARGO_INCREMENTAL=0, nice -n 19, each leg its own `flock` — never one flock around a script.
+
+**Why unfiltered, and why this is the last big build of this phase.** Rounds 21–26 ran four test legs for a five-package span; round 29 ran three legs and *inherited* four on a measured byte-identity argument. Both are legitimate for intermediate rounds, but the skill owes an unfiltered suite "at the tree being shipped" and this candidate is the one up for acceptance, so the inherited legs are being run directly. Legs: `fmt --all --check`; `test -p phase-engine`; `clippy -p phase-engine --all-targets`; `test -p phase-ai`; `test -p manabrew-compat`; `test -p phase-llm`; `test -p engine-wasm`; `clippy --workspace --exclude feed-scraper --all-targets --keep-going`. All `--no-fail-fast`, all `-D warnings` where lint.
+
+**DISK IS THE BINDING CONSTRAINT AND IT IS WORTH YOUR ATTENTION TOO: `/` is at 97%, 56G free of 1.8T.** `cargo-target-onstack-3a` alone is **208G**, and the per-worktree `target/` dirs add ~430G+ across ten worktrees (fow-6301 100G, custom-format-phase-1d 92G, the main checkout 63G, issue-8485 51G, …). Because of that I am **reusing the existing warm target dir rather than allocating an isolated completion one** — a fresh full-workspace target dir could plausibly need more than the 56G that remains, and filling the disk would break every agent on the box, which is a far worse outcome than the disclosed deviation. I have **not** run `cargo clean` or `cargo-sweep` on anything, and will not: those dirs are other agents' work. If you are short of space, that total is where it is, but it is not mine to reclaim.
+
+**If you need the box, say so — I will yield between legs.**
 
 Previously held by backlog-8115-r3, released 2026-11-15T23:25Z after the #10741 (issue #8115) round-3 blocker-2 gate finished green at commit `332a43b1a`. Held ~1h15m of wall clock across three runs (22:09→22:23Z failed build, 22:51→23:13Z clean build + tests, 23:14→23:19Z discrimination check), released at the end of the last run rather than at the end of the round — blockers 1 and 3 are implementation work with no builds for a while, so holding through them would have been an idle hold.
 

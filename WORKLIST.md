@@ -56,7 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none — released 2026-11-16T17:58:00Z by onstack-3a-ii-phase2-executor.
+**Current holder:** onstack-3a-ii-phase2-executor since 2026-11-16T18:09:32Z (expected ~240m, phase-2 verification matrix, 13 legs sequential, pid in the next commit).
+
+**If you need the box, say so — I will yield between legs.** The legs are: `clippy --workspace --exclude feed-scraper --all-targets --keep-going -- -D warnings`, then eleven `cargo test -p <pkg> --no-fail-fast` legs over the eight edit-site packages (phase-engine, phase-ai lib + three `--test` targets, engine-wasm, manabrew-compat, phase-llm, server-core, state-codec, phase-server), then `check -p engine-wasm --target wasm32-unknown-unknown --all-targets --keep-going`. Each leg takes its own `flock` (never a flock around the driver) and writes its own log with an `EXIT=` sentinel, so a reader can tell "running" from "finished" without trusting the driver. The plan predicts clippy in the 2700-4000s band and the engine suite in the 4000-6100s band, which is where the 240m comes from. Two `phase-engine` test failures are EXPECTED and out of span (the stale untracked `client/public/card-data.json`).
 
 Held 2026-11-16T17:47:53Z -> 2026-11-16T17:58:00Z (one leg, ~7m). `cargo check -p phase-engine --all-targets --keep-going` on the rewritten tree: the lib unit compiled CLEAN and the `lib test` unit failed with exactly THREE `E0451` -- the three `..base` functional-update sites, which is charter claim 2's mandated compiler enumeration, matching the plan's predicted membership 3-for-3 with no fourth. Zero `E0616` anywhere. Next group (the verification matrix: workspace clippy + eleven test legs + the wasm32 differential) will be claimed separately with its own estimate.
 

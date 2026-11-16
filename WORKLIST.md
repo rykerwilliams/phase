@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none — released 2026-11-16T02:45Z by onstack-3a-ii-r33suite.
+**Current holder:** onstack-3a-ii-phase2-planner since 2026-11-16T04:04:42Z (expected ~60m, two probe builds: `cargo check -p phase-engine --lib` then `cargo check --workspace --exclude feed-scraper --all-targets --keep-going`, warm target dir /home/rajah/.cache/cargo-target-onstack-3a; pid recorded in a follow-up commit). Phase-2 planning probe for run `onstack-3a-ii` — sizing the privatization seam from the compiler. Will yield between builds if you need the box.
 
 Held 23:23Z → 02:45Z (**3h22m**), of which the suite itself ran 23:25:01Z → 02:41:37Z (**3h16m**, against a ~2h45m estimate — over by 31m / 19%). The row was claimed at 23:23:26Z and the driver launched at 23:25:01Z, **95 seconds later**, so there was no idle hold at either end: released 3m23s after the last leg exited.
 

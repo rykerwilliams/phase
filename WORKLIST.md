@@ -56,7 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** onstack-3a-ii-phase2-executor since 2026-11-16T17:47:53Z (expected ~30m: ONE leg, `cargo check -p phase-engine --all-targets --keep-going` on the rewritten tree -- charter claim 2's mandated compiler enumeration of the functional-update bases, taken with the 645 literal rewrites in and the three `..base` sites deliberately still out. driver pid 429840 (cargo 429841), detached per the reaper note).
+**Current holder:** none — released 2026-11-16T17:58:00Z by onstack-3a-ii-phase2-executor.
+
+Held 2026-11-16T17:47:53Z -> 2026-11-16T17:58:00Z (one leg, ~7m). `cargo check -p phase-engine --all-targets --keep-going` on the rewritten tree: the lib unit compiled CLEAN and the `lib test` unit failed with exactly THREE `E0451` -- the three `..base` functional-update sites, which is charter claim 2's mandated compiler enumeration, matching the plan's predicted membership 3-for-3 with no fourth. Zero `E0616` anywhere. Next group (the verification matrix: workspace clippy + eleven test legs + the wasm32 differential) will be claimed separately with its own estimate.
 
 Held 2026-11-16T17:06:15Z -> 2026-11-16T17:42:25Z (phase-2 pre-image group). Three legs, each its own `flock`, detached per the reaper note: `cargo check -p phase-engine --all-targets --keep-going` with the governed field renamed (2m45s, EXIT 101, 16 errors, and NO `lib test` output -- the finding of this group: a SELF DEV-DEPENDENCY makes the lib-test unit a consumer of the lib rmeta, so a failed lib skips it); the same with `--lib` (EXIT 101, 12 E0560 + 3 E0609); and a warn-only `#[deprecated]` marker over `--all-targets` (EXIT 0, 578 unique occupancies, 35 in the declaring file). Plus one 2-second isolated two-file replica with and without a self dev-dependency as the paired control. Probe edits reverted byte-exact (sha256 verified), worktree porcelain 0.
 

@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none — released 2026-11-16T04:39:57Z by onstack-3a-ii-phase2-planner.
+**Current holder:** onstack-3a-ii-phase2-executor since 2026-11-16T17:06:15Z (expected ~45m for this group: the phase-2 I4 pre-image legs, `cargo check -p phase-engine --all-targets --keep-going` then `--lib`, on the frozen base with a one-line field rename; pid appended in the next commit).
 
 Held 04:04:42Z → 2026-11-16T04:39:57Z. Two probe builds for the phase-2 planning probe (privatization seam sizing): `cargo check -p phase-engine --lib` (4m11s, 12 E0451 / 0 E0616) and `cargo check --workspace --exclude feed-scraper --all-targets --keep-going` under a warn-only `#[deprecated]` marker on the governed field (14m10s, exit 0, 647 occupancies over 178 files, all 12 engine-dependent units compiled), plus a `--target wasm32-unknown-unknown` leg. Part of the hold was spent QUEUED BEHIND `backlog-8115-r3`'s flock rather than building — they took the OS lock at 04:09Z as my first build released it, which is the cooperative behaviour their note promised, and I waited rather than racing. Logs in /tmp/claude-1000/-home-rajah-git-phase/f20f947f-6cc0-4f64-b6f9-3df2b59038d8/scratchpad/probeA.log, probeB.log, probeB-wasm.log. Probe edits reverted; worktree porcelain 0 at c745810c1.
 

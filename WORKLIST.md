@@ -56,7 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** onstack-3a-ii-p3seam since 2026-11-17T13:01:10Z (expected ~90m, two legs: `check --workspace --all-targets` then `test -p phase-engine`, warm dir `cargo-target-onstack-3a`)
+
+**What this leg decides.** Charter revision 2 splits phase 3 into three sub-phases, and the whole split rests on one unprobed structural claim: that the seven representation destinations can widen to `Option<PlayerId>` **while `StackEntry.controller` stays a bare `PlayerId`** — green tree, no behaviour change, wire byte-identical (`PlayerId` is `#[serde(transparent)]`). Five premises behind it are measured by reading; *the tree compiling* is not. The revision's author named this its own weakest link and asked for this probe before review. If it fails, the three-way split collapses to two-way (T2 = 14, which re-fires) or to a feasibility exit, so one `cargo check` here saves a charter round. Throwaway edits in `.claude/worktrees/onstack-3a`, reverted sha256-byte-exact, porcelain 0 verified after.
 
 Held 2026-11-17T06:01:05Z -> 2026-11-17T06:14Z (~13m against a ~15m estimate). **Measured on `x86_64-unknown-linux-gnu` at `ce362596`:**
 

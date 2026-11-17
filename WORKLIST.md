@@ -56,7 +56,21 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** onstack-3a-ii-p3size since 2026-11-17T06:01:05Z (expected ~15m, ONE short leg).
+**Current holder:** none
+
+Held 2026-11-17T06:01:05Z -> 2026-11-17T06:14Z (~13m against a ~15m estimate). **Measured on `x86_64-unknown-linux-gnu` at `ce362596`:**
+
+```
+StackEntry=408  StackEntryKind=384  ObjectId=8  PlayerId=1  Option<PlayerId>=2  alignSE=8  alignSEK=8
+```
+
+**`StackEntry` is 408 bytes on this box, not the 344 the size table records** — the table's own header had already flagged that row as measured on aarch64-apple-darwin and "not re-measured", and it was right to. The layout model is confirmed exactly by the number: `kind[0..384] id[384..392] source_id[392..400] controller[400..401]`, rounded up to align 8 = **408**, leaving **7 bytes of tail padding**. Widening `controller` to `Option<PlayerId>` (2 B) gives 402, which still rounds to **408** — so the widening itself moves nothing.
+
+**Useful to anyone else touching that module: its table is stale on this platform and the ceiling does not discriminate.** By the file's own rule (`measured.next_multiple_of(256) + 256`) both 344 and 408 give the same 768 ceiling, so the recorded ceiling being correct is not evidence that the recorded measurement is. The compile-time assert (`<= 768`) holds comfortably at 408.
+
+Probe was one inline `#[test]`, no `RUSTFLAGS`, reverted and sha256-verified byte-exact (`b4b6f00b…df527`), porcelain 0, tree back to `d3345d6d70c0b8bd40ab3fc0d6d2e721cb0ca013`.
+
+**One trap worth passing on: my first leg was a vacuous pass and reported `EXIT=0`.** I filtered `--test integration`, but `combat_damage_stack_object` is declared in `shard_2.rs:228`, i.e. the `integration_2` binary — so the run returned `ok. 0 passed; 2780 filtered out`. A test-name filter that matches nothing exits 0. **`cargo test <filter>` succeeding is not evidence your test ran — check the passed count, not the exit code.** `crates/engine/Cargo.toml` declares `integration` plus `integration_2`…`integration_5`; grep `tests/integration/shard_*.rs` for the `mod` line to find which binary owns a file.
 
 **One probe, and it decides whether phase 3 gets decomposed** — so it is worth a row of its own. Phase 3's planner measured the phase-fit `T2` scope-path count as **12 or 13** against the charter's stated 11, and the threshold is >=13, so the conjunction's verdict hangs on a single conditional path: `crates/engine/src/types/game_state_size.rs` changes **iff** `size_of::<StackEntry>()` moves. That module's own table records `StackEntry` at **344 B** but its header says the row was measured on **aarch64-apple-darwin and "not re-measured"** — i.e. not on this box. If 344 is simply wrong for `x86_64-unknown-linux-gnu`, the row moves for a reason that has nothing to do with phase 3's widening, and `T2` becomes 13. Probe: one inline `#[cfg(test)]` test in `game_state.rs` printing `size_of::<StackEntry>()`, `size_of::<StackEntryKind>()` and `size_of::<Option<PlayerId>>()`, reverted byte-exact by sha256. **No `RUSTFLAGS`** — that keeps the warm dir's fingerprints intact; `-Zprint-type-sizes` is deliberately NOT used here (the module's own command isolates to `CARGO_TARGET_DIR=/tmp/gs-size`, but a fresh dir means a full dependency build and the disk has **209G free against a 215G warm dir**, so a second full target dir does not fit).
 

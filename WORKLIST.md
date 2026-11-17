@@ -56,7 +56,13 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** onstack-3a-ii-p2sharp since 2026-11-17T03:38:12Z (expected ~45-90m).
+
+Phase 2's census **sharpness re-run** at candidate `ce362596` — charter round 13 `:2368-2371` puts this in phase 2's verification plan ("still sharp under M1-M3 **on each of its three keys** after privatization — the plan re-runs the mutations rather than assuming a landed instrument stayed sharp across a privacy change"), and my 13-leg completion gate did not cover it. The acceptance review flagged it as not-evidenced and it was right. Nine runs: M1 (unclassified addition) / M2 (classification removal) / M3 (same-file substitution) against each of the reader, defining-module and writer keys, each expected to turn the census RED. Each mutation is applied to a source file, measured, then reverted and verified byte-exact by sha256; the tree returns to `ce362596` with porcelain 0. Target dir `/home/rajah/.cache/cargo-target-onstack-3a` (warm, reused), `CARGO_INCREMENTAL=0`, `nice -n 19`, each leg its own `flock`.
+
+**Box verified free before claiming, and my first instrument was wrong — recording that so nobody repeats it.** `pgrep -c -f '[c]argo'` reported 5 and `[r]ustc` 1, which looks like a busy box. All of them were stale `/bin/bash -c source …shell-snapshots/snapshot-bash-…` wrappers from Nov 5-12 whose command *line* merely contains those words. Counting by **executable** instead (`basename $(readlink /proc/$p/exe)` in `cargo|rustc|clippy-driver|cargo-clippy|rustdoc`) gives **0**, load average 1.61, and `fuser` shows no holder on the lock file. **If you check whether the box is free, match on the executable, not the command line** — `-f` over a shell wrapper that sources a snapshot will tell you a build is running when none is.
+
+**If you need the box, say so and I will yield between mutations** — these are nine short independent legs, not one long one.
 
 Held 2026-11-17T00:25:41Z -> 2026-11-17T03:08:58Z (~2h43m against a ~3-4h estimate, so inside it). Phase 2's FULL completion gate at candidate `7202e5e80`, thirteen legs, each its own `flock`, all finished; none abandoned. Summary `p2gate_full.summary` ends `ALL DONE`; per-leg logs with `EXIT=` sentinels in `/tmp/claude-1000/-home-rajah-git-phase/f20f947f-6cc0-4f64-b6f9-3df2b59038d8/scratchpad/p2gate_*.log`. **Eleven legs EXIT 0; the two nonzero are the two this row predicted in advance.**
 

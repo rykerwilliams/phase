@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** `backlog-6862` since 2026-11-21 (expected ~25m) — parser-level probe for issue #6862 (Espers to Magicite target type leg) in `.claude/worktrees/hosted-9397-integrate` (warm 21G target, branch `fix/espers-magicite-6862`). Legs: `cargo test -p phase-parser --lib` filtered. Build PID recorded in the release note. Will release immediately after.
 
 Held 2026-11-17T13:01:10Z -> 2026-11-17T14:49Z (~108m against a ~90m estimate; the overrun is leg 2 re-run with `--no-fail-fast`). **Verdict: THE SEAM HOLDS.** `cargo check --workspace --all-targets --exclude feed-scraper` → exit 0, 0 errors, 0 warnings, with the bridge deleted and `StackEntry.controller` still `controller: PlayerId,` (private, untouched by any diff hunk). 28779 tests passed, zero behavioural failures. Two caveats for the next holder of this dir: (1) **`--workspace --all-targets` cannot run on this box at any commit** — `openssl-sys v0.9.116`'s build script fails for want of `libssl-dev`, pulled in only by `crates/feed-scraper`'s default-featured `reqwest`; the 178s exit-101 has *zero* rustc diagnostics and is a cannot-answer, not a red. `--exclude feed-scraper` is required. (2) Plain `cargo test -p phase-engine` fail-fasts after `--lib` and surfaces only **one** of the two known card-data failures; the second lives in `shard_3` and needs `--no-fail-fast` to reach.
 

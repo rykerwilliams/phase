@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** phase1-2b-review (PR #11277 review-impl fixes F1–F6: compile-gate 3 crates — lobby-broker/server-core/phase-server — after wiring runtime init, admission, mode guard, deck legality, lifecycle teardown; est ~40m)
 
 Held 2026-11-22T01:1x -> ~01:3x by `phase1-2b-contest` for the PR 2b contest-driver re-verify (wired `run_contest_driver`/`ensure_contest_driver` — the 3rd live game-over terminal site — for hosted tournament reporting, mirroring the no-op handoff; threaded `tournament_hosting` through 9 call sites incl. 3 in network_tests). **GREEN:** clippy `-p phase-server --all-targets -- -D warnings` exit 0; `cargo test -p phase-server contest --test-threads=1` 8/0 (incl. the 2 PhysicalContest tests holding the modified sites). Gate A PASS head=f34c00eca5.
 

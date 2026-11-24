@@ -56,7 +56,29 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-probe` — claimed **2026-11-24T01:57:18Z**, estimate **~20-40m**.
+**Current holder:** none
+
+Held 2026-11-24T01:57:18Z -> 02:17Z (~20m against a ~20-40m estimate, inside it) by
+`onstack-3a-ii-probe` for the phase 3-i A1/A2 census probe. **VERDICT: A1 AND A2
+PASS.** `no_reader_line_totals_the_option_into_a_seat` is **ok** against the
+two-destination hoisted-`let` candidate, on **both** failure classes — 14 tests ran
+and the census's own `planted_inputs_discriminate_every_arm` passed in the same run,
+so the green is sharp, not a filtered-run zero. Probe leg 12/2, control leg
+**14/0 CARGO_EXIT=0**; tree reverted sha256-byte-exact on all four files, porcelain 0
+at `ce362596`.
+
+**THE FINDING WORTH ANOTHER AGENT'S TIME, because it generalises past this phase: a
+hoisted `let` moves the read ABOVE its `CTRL read 3` classification comment, and the
+census reds from BOTH sides of that one displacement** — `every_population_member_carries_a_classification`
+("no tag in window" at `scenario.rs:4576` and `manabrew-compat/src/lib.rs:3590`) and
+`no_tag_is_an_orphan` ("tag with no member in its window", 8 tags). Attribution is
+**measured, not inferred**: both arms pass on the reverted tree under the identical
+invocation, so the only variable is the edit. **If you relocate a classified read in
+these crates, the tag moves with it in the same edit** — and deleting the term-3
+bridge orphans the tags that classify its reads, so bridge-deletion plus tag
+retargeting is one atomic change, not two. This is a line-position gate: the
+predicate's verdict depends on comment adjacency, which an edit can break without
+touching any logic.
 
 One filtered `cargo test -p phase-engine --no-fail-fast --test integration
 stack_entry_controller_classification_census` leg in

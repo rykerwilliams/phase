@@ -56,7 +56,23 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** `onstack-3a-ii-probe` — claimed **2026-11-24T01:57:18Z**, estimate **~20-40m**.
+
+One filtered `cargo test -p phase-engine --no-fail-fast --test integration
+stack_entry_controller_classification_census` leg in
+`.claude/worktrees/onstack-3a` at `ce362596`, target dir
+`/home/rajah/.cache/cargo-target-onstack-3a` (warm, reused), `CARGO_INCREMENTAL=0`,
+`nice -n 19`, its own `flock`. **Settles phase 3-i's A1/A2** — whether the census's
+`no_reader_line_totals_the_option_into_a_seat` arm passes against the planned
+two-destination hoisted-`let` candidate, at `manabrew-compat/src/lib.rs:3590` and
+`scenario.rs:4576`. Five throwaway edits, reverted sha256-byte-exact; porcelain 0
+verified after. **The estimate is wide because this leg touches
+`crates/engine/src/types/game_state.rs`, and this file's own history records such a
+leg at 6-10m before the integration target links.** Box verified free by
+**executable** (0 build-tool processes; `pgrep -f` over shell wrappers lies here —
+see the note below), no `fuser` holder on the lock file, 279G free.
+
+**If you need the box, say so and I will yield** — this is one short leg, not a suite.
 
 Held 2026-11-23 by `phase1-2b-review` for PR #11277 review-impl fixes (F1–F6 from matthewevans' CHANGES_REQUESTED). **GREEN, pushed head 7d6eff701a.** clippy `-p lobby-broker -p server-core -p phase-server --all-targets -- -D warnings` exit 0 (only pre-existing homepage manifest warning). Tests: lobby-broker 347/0, server-core 583/0, new F6 e2e test `a_hosted_tournament_match_spawns_runs_and_reports_through_production` 1/0 serial, phase-server `contest` 8/0 serial. Gate A PASS head=7d6eff701a. Fresh review-impl (opus, 2 passes): all 6 maintainer findings cleared; 3 new non-blocking (1 LOW auth-gate fixed in-head via a readiness pre-check replacing the broken `PersistedChange::Changed` gate; 1 MED broker-lock-across-game-start + 1 LOW re-host-vs-forfeit disclosed in PR body). Key finding for the next holder: `admit_or_restore` (lobby-broker/src/broker.rs:833) returns `PersistedChange::Changed` for ANY within-ceiling MayGrow frame WITHOUT a pre/post compare — so `Changed` is a snapshot-dirty hint, NOT an authorization/true-mutation signal. Don't use it as one.
 

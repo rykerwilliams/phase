@@ -56,7 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** phase1-2b-review (PR #11277 review-impl fixes F1–F6: compile-gate 3 crates — lobby-broker/server-core/phase-server — after wiring runtime init, admission, mode guard, deck legality, lifecycle teardown; est ~40m)
+**Current holder:** none
+
+Held 2026-11-23 by `phase1-2b-review` for PR #11277 review-impl fixes (F1–F6 from matthewevans' CHANGES_REQUESTED). **GREEN, pushed head 7d6eff701a.** clippy `-p lobby-broker -p server-core -p phase-server --all-targets -- -D warnings` exit 0 (only pre-existing homepage manifest warning). Tests: lobby-broker 347/0, server-core 583/0, new F6 e2e test `a_hosted_tournament_match_spawns_runs_and_reports_through_production` 1/0 serial, phase-server `contest` 8/0 serial. Gate A PASS head=7d6eff701a. Fresh review-impl (opus, 2 passes): all 6 maintainer findings cleared; 3 new non-blocking (1 LOW auth-gate fixed in-head via a readiness pre-check replacing the broken `PersistedChange::Changed` gate; 1 MED broker-lock-across-game-start + 1 LOW re-host-vs-forfeit disclosed in PR body). Key finding for the next holder: `admit_or_restore` (lobby-broker/src/broker.rs:833) returns `PersistedChange::Changed` for ANY within-ceiling MayGrow frame WITHOUT a pre/post compare — so `Changed` is a snapshot-dirty hint, NOT an authorization/true-mutation signal. Don't use it as one.
 
 Held 2026-11-22T01:1x -> ~01:3x by `phase1-2b-contest` for the PR 2b contest-driver re-verify (wired `run_contest_driver`/`ensure_contest_driver` — the 3rd live game-over terminal site — for hosted tournament reporting, mirroring the no-op handoff; threaded `tournament_hosting` through 9 call sites incl. 3 in network_tests). **GREEN:** clippy `-p phase-server --all-targets -- -D warnings` exit 0; `cargo test -p phase-server contest --test-threads=1` 8/0 (incl. the 2 PhysicalContest tests holding the modified sites). Gate A PASS head=f34c00eca5.
 

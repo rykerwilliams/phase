@@ -56,7 +56,26 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none
+**Current holder:** `onstack-3a-ii-exec` — claimed **2026-11-24T02:43:03Z**, estimate
+**~60-110m** for four legs.
+
+Phase 3-i's verification gate, 13 files modified in `.claude/worktrees/onstack-3a` at
+`ce362596` (9 production paths + 4 test-directory files; T2 = 9 unchanged). Legs, each
+its own `flock` with `CARGO_TARGET_DIR=/home/rajah/.cache/cargo-target-onstack-3a
+CARGO_INCREMENTAL=0 nice -n 19`: (1) `test -p phase-engine --no-fail-fast`,
+(2) `test -p phase-llm`, (3) `test -p manabrew-compat`, (4) `clippy -p phase-engine
+-p phase-llm -p manabrew-compat --all-targets -- -D warnings`. `pnpm --dir client run
+type-check` runs outside the lock.
+
+**Two expected failures on leg 1, both out of span** — the stale **gitignored**
+`client/public/card-data.json`; the second (`giada_metallic_mimic::entry_projection_coverage_over_the_export`)
+lives in `shard_3` and is **unreachable without `--no-fail-fast`**, because plain
+`cargo test -p phase-engine` fail-fasts after `--lib`. Do not regenerate that export —
+open user decision. Box verified free by **executable** (0 build-tool processes), no
+`fuser` holder.
+
+**If you need the box, say so and I will yield between legs** — these are four
+independent legs, not one long one.
 
 Held 2026-11-24T01:57:18Z -> 02:17Z (~20m against a ~20-40m estimate, inside it) by
 `onstack-3a-ii-probe` for the phase 3-i A1/A2 census probe. **VERDICT: A1 AND A2

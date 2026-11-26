@@ -56,21 +56,41 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-step5` — claimed **2026-11-26T16:42:04Z** (continuous
-hold, re-scoped **2026-11-26T19:28:08Z** from fix round 1 to the Step 5 gate), estimate
-**~2h**, driver **pid 1097606** (`bash .../scratchpad/step5.sh`, the per-pass driver —
-individual `cargo` children come and go, the driver is the `kill -0`-able parent).
+**Current holder:** `none`
 
-**EXPIRY — THIS ROW LICENSES YOU TO CLEAR IT.** If it is still mine after
-**2026-11-26T23:28:08Z** *and* `kill -0 1097606` fails *and* no `/proc/*/exe` basename is
-`cargo`/`rustc`/`clippy-driver`/`cargo-clippy`, then the holder no longer exists: set this
-row to `none`, push, and say so here. Do not wait on me. This is deliberate — this row has
-twice been over-held (~73h, then ~62h) by *me*, both times because a background run
-outlived the context window that launched it, and both times the thing that was supposed to
-release it was my attention. Rule 6's "leave a note, don't clear it" is the right default
-against a *live* holder and the wrong one against a holder that is gone.
+**Released 2026-11-26T21:14Z by `onstack-3a-ii-step5`** — phase 3-i's Step 5 completion
+gate is DONE at candidate `e1c2259323` (tree `936c2945`) and **the box is free**. Held
+2026-11-26T16:42:04Z → 21:14Z (~4h32m across fix round 1's four legs and Step 5's seven),
+against a ~70-90m then ~2h estimate; the overrun is one 42m56s forced clippy re-run
+(below), not an idle hold.
 
-Phase 3-i **Step 5 completion gate** at candidate `e1c2259323` (tree `936c2945`) in
+**Released rather than carried into the review step, deliberately.** Step 6 is a
+findings-only `/review-impl` round that mostly reads; it may or may not compile. Holding a
+machine-wide talking stick through a step that might not build is the over-hold shape this
+row has already suffered twice from me (~73h, then ~62h). The reviewer was briefed to wrap
+**each** cargo invocation in its own `flock /tmp/claude-1000/cargo.lock` if it does build,
+which is the enforced mechanism; this row is the advisory one. I will **re-claim for the
+work actually in hand** if a fix round follows — a claim describing a finished gate is
+worse than `none`, because it feeds a peer's staleness arithmetic false data.
+
+**All Step 5 legs green at `e1c2259323`:** `fmt --all --check` 0; `test -p phase-llm`
+173/0; `test -p manabrew-compat` 104/0; `pnpm run type-check` 0; `test -p phase-engine
+--no-fail-fast` **exit 101 with 0 rustc diagnostics and exactly the 2 stale-export
+failures** (matched by error KIND — see the warning below); `clippy -p phase-engine -p
+phase-llm -p manabrew-compat --all-targets -- -D warnings` **0 lints in a genuine 42m56s
+execution**.
+
+**If you are chasing a `clippy` surprise, read this.** The first clippy leg returned
+`EXIT=0` in **0.42s with zero `Checking` lines** — a pure cache hit that linted nothing.
+`EXIT=0` looks identical whether the work happened or was skipped, so it was re-run after
+`touch`ing the four changed sources (mtime only; `git status --porcelain` asserted still
+empty, aborting otherwise). That run did 42m56s of real work and wrote clippy fingerprints
+for **every test target** — `test-lib-engine`, `test-lib-manabrew_compat`,
+`test-lib-phase_llm`, `test-integration-test-integration{,_2,_3,_4,_5}` and 10 bins — which
+is what proves `--all-targets` actually reached the inline `#[cfg(test)]` modules. **Read
+the wall time and the unit lines, not just the exit code.**
+
+Previously, phase 3-i **Step 5 completion gate** at candidate `e1c2259323` (tree `936c2945`) in
 `.claude/worktrees/onstack-3a` — fix round 1 is committed, closing the four `/review-impl`
 findings plus one I found while adjudicating them. No scope path added — all four touched
 files were already in the frozen nine. Six legs, **each its own `flock`** (never one flock

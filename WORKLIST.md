@@ -56,17 +56,36 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-fix2` — re-scoped **2026-11-26T21:51:28Z**, estimate
-**~60-90m**. Step 6 round 2 is DONE (its legs finished; box verified free by
-`/proc/*/exe` basename at re-scope). **Re-scoped rather than left reading `review2`,
-because a claim describing finished work is worse than `none`** — it feeds a peer's
-staleness arithmetic false data, which this file already records me doing once.
+**Current holder:** `onstack-3a-ii-step5c` — re-scoped **2026-11-26T22:12:57Z**, estimate
+**~70m**, driver **pid 1500189** (`bash .../scratchpad/step5c.sh`, the per-pass driver;
+its `cargo`/`rustc` children churn, the driver is the `kill -0`-able parent).
 
-Phase 3-i **fix round 2** at candidate `e1c2259323` in `.claude/worktrees/onstack-3a`.
-Round 2 returned **no HIGH, no MED, two LOW**, both verified by me before dispatch, both
-comment/test-only, both inside the frozen 13. No scope path added. Legs will be narrow:
-`-p phase-engine --test integration` (census arms), `-p phase-llm --lib`,
-`-p manabrew-compat --lib`, plus `fmt`. **Each its own `flock`.**
+Phase 3-i **Step 5 completion gate at candidate `09122599e0`** (tree `ab135f94`) in
+`.claude/worktrees/onstack-3a`. Fix round 2 is committed — it closed the two LOW findings
+from `/review-impl` round 2, all three touched files already inside the frozen 13, no
+scope path added, and **every changed line is either a `//!` doc line or an inline
+`#[cfg(test)]` assertion**. Six legs, **each its own `flock`**: `fmt --all --check` (no
+lock), `test -p phase-llm`, `test -p manabrew-compat`, `pnpm run type-check` (no cargo
+lock), `clippy … --all-targets -- -D warnings`, `test -p phase-engine --no-fail-fast`.
+
+**The clippy leg is WARM BY DESIGN and a fast return there is corroboration, not
+evidence.** Fix round 2's own clippy already did a real **4m24s** execution at this exact
+content with `Checking` emitted for all three edited crates, and the clippy fingerprints
+for exactly the affected test targets — `test-integration-test-integration`,
+`test-lib-phase_llm`, `test-lib-manabrew_compat` — are timestamped **after** the edits.
+`test-lib-engine` and the other integration shards are correctly absent from that set: a
+file under `tests/integration/` compiles only into its own test binary. The genuinely new
+leg is `-p phase-engine --no-fail-fast`, since the census edit changed the `integration`
+binary and nothing has yet exercised the rest of it.
+
+**EXPIRY — THIS ROW LICENSES YOU TO CLEAR IT.** If it is still mine after
+**2026-11-27T01:12:57Z** *and* `kill -0 1500189` fails *and* no `/proc/*/exe` basename is
+`cargo`/`rustc`/`clippy-driver`/`cargo-clippy`, then the holder is gone: set this row to
+`none`, push, and say so here. Do not wait on me.
+
+Re-scoped at each handoff rather than carried: **a claim describing finished work is worse
+than `none`**, because it feeds a peer's staleness arithmetic false data — which this file
+already records me doing once.
 
 **EXPIRY — THIS ROW LICENSES YOU TO CLEAR IT.** If it is still mine after
 **2026-11-27T00:51:28Z** *and* no `/proc/*/exe` basename is

@@ -56,21 +56,38 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-fix1` — claimed **2026-11-26T16:42:04Z**, estimate
-**~70-90m** for four legs.
+**Current holder:** `onstack-3a-ii-step5` — claimed **2026-11-26T16:42:04Z** (continuous
+hold, re-scoped **2026-11-26T19:28:08Z** from fix round 1 to the Step 5 gate), estimate
+**~2h**, driver **pid 1097606** (`bash .../scratchpad/step5.sh`, the per-pass driver —
+individual `cargo` children come and go, the driver is the `kill -0`-able parent).
 
-Phase 3-i **fix round 1**: 4 files modified in `.claude/worktrees/onstack-3a` at
-candidate `45098773a8`, closing the four `/review-impl` findings plus one I found while
-adjudicating them. No scope path added — all four are already in the frozen nine.
-Legs, each its own `flock` with `CARGO_TARGET_DIR=/home/rajah/.cache/cargo-target-onstack-3a
-CARGO_INCREMENTAL=0 nice -n 19`: (1) `test -p phase-llm`, (2) `test -p manabrew-compat`,
-(3) `test -p phase-engine --no-fail-fast`, (4) `clippy -p phase-engine -p phase-llm
--p manabrew-compat --all-targets -- -D warnings`.
+**EXPIRY — THIS ROW LICENSES YOU TO CLEAR IT.** If it is still mine after
+**2026-11-26T23:28:08Z** *and* `kill -0 1097606` fails *and* no `/proc/*/exe` basename is
+`cargo`/`rustc`/`clippy-driver`/`cargo-clippy`, then the holder no longer exists: set this
+row to `none`, push, and say so here. Do not wait on me. This is deliberate — this row has
+twice been over-held (~73h, then ~62h) by *me*, both times because a background run
+outlived the context window that launched it, and both times the thing that was supposed to
+release it was my attention. Rule 6's "leave a note, don't clear it" is the right default
+against a *live* holder and the wrong one against a holder that is gone.
 
-**Leg 3 expects exactly 2 failures, both out of span** — the stale gitignored
-`client/public/card-data.json` (`TurnSegment` shape; `unknown variant FlipCoin` in
-`shard_3`, unreachable without `--no-fail-fast`). Not regenerated. Leg 3 is **~58m of
-pure test execution even warm**, which is most of the estimate.
+Phase 3-i **Step 5 completion gate** at candidate `e1c2259323` (tree `936c2945`) in
+`.claude/worktrees/onstack-3a` — fix round 1 is committed, closing the four `/review-impl`
+findings plus one I found while adjudicating them. No scope path added — all four touched
+files were already in the frozen nine. Six legs, **each its own `flock`** (never one flock
+around the pass) with `CARGO_TARGET_DIR=/home/rajah/.cache/cargo-target-onstack-3a
+CARGO_INCREMENTAL=0 nice -n 19`: (A) `fmt --all --check` (no lock, doesn't compile),
+(B) `test -p phase-llm`, (C) `test -p manabrew-compat`, (D) `pnpm run type-check` (no
+cargo lock), (E) `clippy -p phase-engine -p phase-llm -p manabrew-compat --all-targets --
+-D warnings` ~45m, (F) `test -p phase-engine --no-fail-fast` ~58m.
+
+**Leg F expects 2 failures out of span, and may show a 3rd — match by KIND, not count.**
+The two are the stale gitignored `client/public/card-data.json` (`TurnSegment` shape in
+`--lib`; `unknown variant FlipCoin` in `integration_3`, unreachable without
+`--no-fail-fast`). Not regenerated. The possible third is
+`game::log::tests::batch_resolution_scales_near_linearly`, a **wall-clock** threshold
+(8s) that missed by 1.85% under load on 2026-11-26 and passes in **1.20s** standalone —
+a load-dependent flake, not a regression. An expected-count of exactly 2 will red
+spuriously on a contended box.
 
 **If you need the box, say so and I will yield between legs** — four independent legs,
 not one long one. Box verified free by executable name before claiming (0

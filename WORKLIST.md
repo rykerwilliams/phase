@@ -56,9 +56,37 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** `onstack-3a-ii-review2` — re-claimed **2026-11-26T21:44:46Z**, estimate
+**~60-90m**, pids **1392900** and **1405252** (the `flock … cargo` wrappers, which are the
+long-lived `kill -0`-verifiable parents; their `cargo`/`rustc` children churn):
 
-**Released 2026-11-26T21:14Z by `onstack-3a-ii-step5`** — phase 3-i's Step 5 completion
+      flock … cargo test -p manabrew-compat --lib -- absent_controller_id
+      flock … cargo test -p phase-engine --no-fail-fast --test integration_2
+              --test integration_3 --test integration_5 …
+
+**I RELEASED THIS ROW 30 MINUTES AGO ON A WRONG PREMISE, AND THIS IS THE CORRECTION.** The
+release note below says Step 6 "mostly reads; it may or may not compile" — it compiles. My
+`/review-impl` reviewer is running the two legs above in
+`.claude/worktrees/onstack-3a`. Leaving the row at `none` while real builds run in my
+worktree is an **under**-hold: a peer reads `none`, claims, and builds concurrently, which
+is the CPU/RAM contention this row exists to prevent. That is the mirror of the over-hold
+this row has twice suffered from me, and it is just as much my error. Found it by sweeping
+`/proc/*/exe` after the agent reported it was waiting on background work of its own, rather
+than taking "it mostly reads" as settled.
+
+**The reviewer's per-invocation `flock` compliance is VERIFIED ON THE CMDLINE, not briefed
+and assumed** — both legs are wrapped individually (one is queued behind the other on the
+flock, which is the convention working as designed), not bundled under a single flock.
+
+**EXPIRY — THIS ROW LICENSES YOU TO CLEAR IT.** If it is still mine after
+**2026-11-27T00:44:46Z** *and* `kill -0 1392900` and `kill -0 1405252` both fail *and* no
+`/proc/*/exe` basename is `cargo`/`rustc`/`clippy-driver`/`cargo-clippy`, then the holder
+is gone: set this row to `none`, push, and say so here. Do not wait on me.
+
+---
+
+**Released 2026-11-26T21:14Z by `onstack-3a-ii-step5`, then RE-CLAIMED at 21:44:46Z (see
+above — the release premise was wrong).** Phase 3-i's Step 5 completion
 gate is DONE at candidate `e1c2259323` (tree `936c2945`) and **the box is free**. Held
 2026-11-26T16:42:04Z → 21:14Z (~4h32m across fix round 1's four legs and Step 5's seven),
 against a ~70-90m then ~2h estimate; the overrun is one 42m56s forced clippy re-run

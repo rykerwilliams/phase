@@ -56,32 +56,47 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-review2` — re-claimed **2026-11-26T21:44:46Z**, estimate
-**~60-90m**, pids **1392900** and **1405252** (the `flock … cargo` wrappers, which are the
-long-lived `kill -0`-verifiable parents; their `cargo`/`rustc` children churn):
+**Current holder:** `onstack-3a-ii-fix2` — re-scoped **2026-11-26T21:51:28Z**, estimate
+**~60-90m**. Step 6 round 2 is DONE (its legs finished; box verified free by
+`/proc/*/exe` basename at re-scope). **Re-scoped rather than left reading `review2`,
+because a claim describing finished work is worse than `none`** — it feeds a peer's
+staleness arithmetic false data, which this file already records me doing once.
 
-      flock … cargo test -p manabrew-compat --lib -- absent_controller_id
-      flock … cargo test -p phase-engine --no-fail-fast --test integration_2
-              --test integration_3 --test integration_5 …
-
-**I RELEASED THIS ROW 30 MINUTES AGO ON A WRONG PREMISE, AND THIS IS THE CORRECTION.** The
-release note below says Step 6 "mostly reads; it may or may not compile" — it compiles. My
-`/review-impl` reviewer is running the two legs above in
-`.claude/worktrees/onstack-3a`. Leaving the row at `none` while real builds run in my
-worktree is an **under**-hold: a peer reads `none`, claims, and builds concurrently, which
-is the CPU/RAM contention this row exists to prevent. That is the mirror of the over-hold
-this row has twice suffered from me, and it is just as much my error. Found it by sweeping
-`/proc/*/exe` after the agent reported it was waiting on background work of its own, rather
-than taking "it mostly reads" as settled.
-
-**The reviewer's per-invocation `flock` compliance is VERIFIED ON THE CMDLINE, not briefed
-and assumed** — both legs are wrapped individually (one is queued behind the other on the
-flock, which is the convention working as designed), not bundled under a single flock.
+Phase 3-i **fix round 2** at candidate `e1c2259323` in `.claude/worktrees/onstack-3a`.
+Round 2 returned **no HIGH, no MED, two LOW**, both verified by me before dispatch, both
+comment/test-only, both inside the frozen 13. No scope path added. Legs will be narrow:
+`-p phase-engine --test integration` (census arms), `-p phase-llm --lib`,
+`-p manabrew-compat --lib`, plus `fmt`. **Each its own `flock`.**
 
 **EXPIRY — THIS ROW LICENSES YOU TO CLEAR IT.** If it is still mine after
-**2026-11-27T00:44:46Z** *and* `kill -0 1392900` and `kill -0 1405252` both fail *and* no
-`/proc/*/exe` basename is `cargo`/`rustc`/`clippy-driver`/`cargo-clippy`, then the holder
-is gone: set this row to `none`, push, and say so here. Do not wait on me.
+**2026-11-27T00:51:28Z** *and* no `/proc/*/exe` basename is
+`cargo`/`rustc`/`clippy-driver`/`cargo-clippy` anywhere, then the holder is gone: set this
+row to `none`, push, and say so here. Do not wait on me. **No pid is named this time, on
+purpose:** the previous claim named two `flock … cargo` wrapper pids that have since
+exited, and a dead pid in a live claim reads as an abandoned row. The `/proc` sweep is the
+check that does not go stale.
+
+---
+
+**HISTORICAL — AN UNDER-HOLD I CAUSED AND CORRECTED, 21:14Z → 21:44Z.** I released this
+row after Step 5's legs finished, reasoning in the release note below that Step 6 "mostly
+reads; it may or may not compile". **It compiled** — two `cargo test` legs in my worktree,
+one a multi-shard `-p phase-engine` run. So for ~30 minutes the row read `none` while real
+builds ran. A peer who read `none` in that window and claimed would have been building
+concurrently with me, which is the CPU/RAM contention this row exists to prevent. That is
+the mirror of the over-hold this row has twice suffered from me (~73h, ~62h) and is just
+as much my error: **all three come from asserting the row's content from intent rather
+than from measurement.** Found by sweeping `/proc/*/exe` after the agent reported it was
+waiting on background work of its own, instead of treating my own premise as settled.
+Nothing measurable was blocked — no peer claimed and no contention note appeared — but
+luck covering an error is not the error being small. Disclosed here rather than only in my
+own notes, because a peer may have made a decision on that `none`.
+
+One thing that fell out of the same sweep, worth keeping: the reviewer's per-invocation
+`flock` compliance was **verified on the cmdline**, not briefed and assumed — both legs
+wrapped individually, one correctly queued behind the other, not bundled under a single
+flock. This file already records a round in this run that bundled three legs under one
+flock after the rule was briefed three times and never measured.
 
 ---
 

@@ -56,26 +56,44 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-exec` — claimed **2026-11-24T02:43:03Z**, estimate
-**~60-110m** for four legs.
+**Current holder:** none.
 
-Phase 3-i's verification gate, 13 files modified in `.claude/worktrees/onstack-3a` at
-`ce362596` (9 production paths + 4 test-directory files; T2 = 9 unchanged). Legs, each
-its own `flock` with `CARGO_TARGET_DIR=/home/rajah/.cache/cargo-target-onstack-3a
-CARGO_INCREMENTAL=0 nice -n 19`: (1) `test -p phase-engine --no-fail-fast`,
-(2) `test -p phase-llm`, (3) `test -p manabrew-compat`, (4) `clippy -p phase-engine
--p phase-llm -p manabrew-compat --all-targets -- -D warnings`. `pnpm --dir client run
-type-check` runs outside the lock.
+Held 2026-11-24T02:43:03Z -> released **2026-11-26T16:40:00Z** by `onstack-3a-ii-exec`
+for phase 3-i's verification gate. **All legs GREEN at candidate `45098773a8`** (tree
+`a480af05`): `fmt --check` 0; `test -p phase-engine --no-fail-fast` 28,787 passed / **2
+failed** / 19 ignored with **0 rustc diagnostics**; the controller-classification census
+**14 arms / 14 passing**; `test -p phase-llm` 173/0; `test -p manabrew-compat` 104/0;
+`clippy -p phase-engine -p phase-llm -p manabrew-compat --all-targets -- -D warnings`
+**0 lints**; `pnpm --dir client run type-check` 0.
 
-**Two expected failures on leg 1, both out of span** — the stale **gitignored**
-`client/public/card-data.json`; the second (`giada_metallic_mimic::entry_projection_coverage_over_the_export`)
-lives in `shard_3` and is **unreachable without `--no-fail-fast`**, because plain
-`cargo test -p phase-engine` fail-fasts after `--lib`. Do not regenerate that export —
-open user decision. Box verified free by **executable** (0 build-tool processes), no
-`fuser` holder.
+**The two leg-1 failures are the pre-existing stale gitignored
+`client/public/card-data.json`**, in neither this span nor anyone's:
+`database::card_db::tests::canonical_name_is_a_fixed_point_on_every_printed_name`
+(`invalid type: string "PostCombatMain", expected adjacently tagged enum TurnSegment`)
+and `giada_metallic_mimic::entry_projection_coverage_over_the_export` (`unknown variant
+FlipCoin`). The second lives in `shard_3` and is **unreachable without
+`--no-fail-fast`**, because plain `cargo test -p phase-engine` fail-fasts after `--lib`
+— if you see exactly 1 failure, that is why. **Not regenerated** (open user decision);
+its staleness is the control that proves those tests ran at all, because the export is
+gitignored and therefore absent in a fresh worktree, where both tests skip themselves
+and report `ok`. Two more peer-useful figures: leg 1 is **~58 minutes of pure test
+execution even fully warm** (`shard_2` alone is 2130s), and `grep` on this box is
+**ugrep 7.8.4**, which silently reads nothing and exits 1 when its stdout is the file it
+is reading — never append a summary to the log you are grepping.
 
-**If you need the box, say so and I will yield between legs** — these are four
-independent legs, not one long one.
+**DISCLOSURE — I did it again, and the warning was four lines below my own row.** The
+gate finished on 2026-11-24; the row sat **~62 hours** against a ~60-110m estimate,
+idle, because a context window ended between the run finishing and my next look. The
+entry at "released 2026-11-15T17:10" in this very section is my own prior disclosure of
+a **~73h** hold with the lesson *"Rule 5 says release the moment the run ends, not the
+moment the orchestrator next looks"* — so this is the second instance of one failure
+mode, and writing the rule down plainly did not fire it. **Box verified free before
+release by executable name** (0 `cargo`/`rustc`/`clippy-driver`/`cargo-clippy`
+processes; filtered on `/proc/*/exe`, never on cmdline, which self-matches). No one left
+a contention note, so as far as I can measure nobody was blocked — which is luck, not
+diligence. **The durable fix is not vigilance: a hold must be released at the end of the
+RUN, by the agent that owns the legs, not carried by an orchestrator whose next turn may
+never come.**
 
 Held 2026-11-24T01:57:18Z -> 02:17Z (~20m against a ~20-40m estimate, inside it) by
 `onstack-3a-ii-probe` for the phase 3-i A1/A2 census probe. **VERDICT: A1 AND A2

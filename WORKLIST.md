@@ -56,9 +56,26 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-step5c` — re-scoped **2026-11-26T22:12:57Z**, estimate
-**~70m**, driver **pid 1500189** (`bash .../scratchpad/step5c.sh`, the per-pass driver;
-its `cargo`/`rustc` children churn, the driver is the `kill -0`-able parent).
+**Current holder:** `onstack-3a-ii-review3` — re-scoped **2026-11-26T23:15:05Z**, estimate
+**~60-90m**. Phase 3-i's **Step 6 round 3** (`/review-impl`, findings-only) over
+`ce36259618..09122599e0` in `.claude/worktrees/onstack-3a`.
+
+**HELD THROUGH THIS REVIEW ROUND ON PURPOSE, UNLIKE LAST TIME.** When I released the row
+before round 2 I reasoned that a findings-only review "may or may not compile" — it
+compiled, and the row read `none` for ~30 minutes while two `cargo test` legs ran (the
+under-hold disclosed further down). Round 2's reviewer is the evidence that this kind of
+round builds, so the row stays claimed rather than resting on the same prediction twice.
+No pid is named yet because the reviewer launches its own legs; I verify by `/proc/*/exe`
+sweep once it starts rather than predicting either way.
+
+**Step 5's completion gate is GREEN at `09122599e0`** (tree `ab135f94`), 22:12Z→23:12Z:
+`fmt --all --check` 0; `test -p phase-llm` 173/0; `test -p manabrew-compat` 104/0;
+`pnpm run type-check` 0; `test -p phase-engine --no-fail-fast` exit 101 with **0 rustc
+diagnostics and exactly the 2 stale-export failures, matched by KIND** (the wall-clock perf
+flake did not recur). The clippy leg returned in 0.34s — **a cache hit, and expected**:
+fix round 2's own clippy did a real 4m24s execution at this exact content with `Checking`
+for all three edited crates and test-target fingerprints timestamped after the edits, so
+the fast return corroborates rather than substitutes.
 
 Phase 3-i **Step 5 completion gate at candidate `09122599e0`** (tree `ab135f94`) in
 `.claude/worktrees/onstack-3a`. Fix round 2 is committed — it closed the two LOW findings

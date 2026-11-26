@@ -56,17 +56,39 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `onstack-3a-ii-review3` — re-scoped **2026-11-26T23:15:05Z**, estimate
-**~60-90m**. Phase 3-i's **Step 6 round 3** (`/review-impl`, findings-only) over
-`ce36259618..09122599e0` in `.claude/worktrees/onstack-3a`.
+**Current holder:** `none`
 
-**HELD THROUGH THIS REVIEW ROUND ON PURPOSE, UNLIKE LAST TIME.** When I released the row
-before round 2 I reasoned that a findings-only review "may or may not compile" — it
-compiled, and the row read `none` for ~30 minutes while two `cargo test` legs ran (the
-under-hold disclosed further down). Round 2's reviewer is the evidence that this kind of
-round builds, so the row stays claimed rather than resting on the same prediction twice.
-No pid is named yet because the reviewer launches its own legs; I verify by `/proc/*/exe`
-sweep once it starts rather than predicting either way.
+**Released 2026-11-26T23:35:44Z by `onstack-3a-ii-review3`. PHASE 3-i IS ACCEPTED and the
+box is free** — verified before releasing by `/proc/*/exe` basename (zero
+`cargo`/`rustc`/`clippy-driver`/`cargo-clippy`) **and** by an fd scan of
+`/tmp/claude-1000/cargo.lock` showing nobody holding or queued. Held
+2026-11-26T16:42:04Z → 23:35:44Z, ~6h54m across fix round 1, Step 5, fix round 2, Step 5
+again and two review rounds, with one 30-minute gap that was my error (below).
+
+**Accepted candidate `09122599e0798d2578319797952ccdfb647aa67c`** (tree `ab135f94`), one
+commit over base `ce36259618`, 13 files / 927+ / 229−. The three acceptance preconditions
+were each measured, not assumed: `rev-parse HEAD` equals that SHA with a clean tree; `Step 6
+round 3` returned **zero findings** (no HIGH, no MED, no LOW) with both its gates PASS after
+two consecutive LOW-only rounds; and Step 5's completion gate is green there — `fmt` 0,
+`-p phase-llm` 173/0, `-p manabrew-compat` 104/0, `pnpm run type-check` 0, clippy
+`--all-targets -D warnings` 0 lints, and `-p phase-engine --no-fail-fast` exit 101 with **0
+rustc diagnostics and exactly the 2 stale-export failures matched by KIND**.
+
+**For the next agent who touches this worktree:** the two `-p phase-engine` reds are the
+stale gitignored `client/public/card-data.json` (`TurnSegment` shape in `--lib`; `unknown
+variant FlipCoin` in `integration_3`). **Not regenerated — open user decision.** Their
+staleness is the control proving those tests ran: in a clean worktree the export is absent
+and both tests skip themselves and report `ok`. **Match by kind, never by count** — a
+wall-clock perf threshold elsewhere in that suite (`game::log::tests::
+batch_resolution_scales_near_linearly`, 8s limit, passes in 1.20s standalone) makes the
+count 2 or 3 depending on load.
+
+**And if you read a sub-second `clippy … 0 lints` in a log here, do not trust it on its
+own.** One leg in this phase returned `EXIT=0` in 0.42s with zero `Checking` lines — a pure
+cache report that linted nothing, indistinguishable by exit code from a real run. Read the
+wall time and the unit lines.
+
+---
 
 **Step 5's completion gate is GREEN at `09122599e0`** (tree `ab135f94`), 22:12Z→23:12Z:
 `fmt --all --check` 0; `test -p phase-llm` 173/0; `test -p manabrew-compat` 104/0;

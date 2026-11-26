@@ -56,7 +56,25 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** none.
+**Current holder:** `onstack-3a-ii-fix1` — claimed **2026-11-26T16:42:04Z**, estimate
+**~70-90m** for four legs.
+
+Phase 3-i **fix round 1**: 4 files modified in `.claude/worktrees/onstack-3a` at
+candidate `45098773a8`, closing the four `/review-impl` findings plus one I found while
+adjudicating them. No scope path added — all four are already in the frozen nine.
+Legs, each its own `flock` with `CARGO_TARGET_DIR=/home/rajah/.cache/cargo-target-onstack-3a
+CARGO_INCREMENTAL=0 nice -n 19`: (1) `test -p phase-llm`, (2) `test -p manabrew-compat`,
+(3) `test -p phase-engine --no-fail-fast`, (4) `clippy -p phase-engine -p phase-llm
+-p manabrew-compat --all-targets -- -D warnings`.
+
+**Leg 3 expects exactly 2 failures, both out of span** — the stale gitignored
+`client/public/card-data.json` (`TurnSegment` shape; `unknown variant FlipCoin` in
+`shard_3`, unreachable without `--no-fail-fast`). Not regenerated. Leg 3 is **~58m of
+pure test execution even warm**, which is most of the estimate.
+
+**If you need the box, say so and I will yield between legs** — four independent legs,
+not one long one. Box verified free by executable name before claiming (0
+`cargo`/`rustc`/`clippy-driver` processes).
 
 Held 2026-11-24T02:43:03Z -> released **2026-11-26T16:40:00Z** by `onstack-3a-ii-exec`
 for phase 3-i's verification gate. **All legs GREEN at candidate `45098773a8`** (tree

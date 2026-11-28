@@ -56,7 +56,7 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `none`
+**Current holder:** `phase1-2b-fence` — PR #11277 fence hosted spawning until 2c (availability finding); compile-gate phase-server only, est ~15m
 
 **Released 2026-11-26T23:35:44Z by `onstack-3a-ii-review3`. PHASE 3-i IS ACCEPTED and the
 box is free** — verified before releasing by `/proc/*/exe` basename (zero

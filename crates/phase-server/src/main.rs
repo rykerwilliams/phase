@@ -1090,6 +1090,17 @@ struct ServerContext {
     /// Shared by every game and application encoder; transport control never
     /// waits for a compute permit.
     game_executor: game_executor::GameExecutor,
+    /// Fences automatic hosted-tournament-match spawning until the 2c
+    /// seat-delivery slice lands. Default `false` in production: without
+    /// delivery, a spawned hosted game is never attached to (seats stay
+    /// disconnected, no credentials delivered, no lobby listing) and so no
+    /// ordinary expiry path reclaims it — auto-spawning would let accepted
+    /// tournament actions fill the shared game ceiling with unjoinable games
+    /// (PR #11277 availability finding). The spawn machinery (`maybe_spawn_
+    /// tournament_matches`, the readiness/bind/host/teardown path, the
+    /// background re-host) stays live and tested behind this flag; 2c enables
+    /// it alongside seat delivery and bounded unclaimed-session reclamation.
+    hosted_match_spawning: bool,
 }
 
 impl Default for ServerContext {
@@ -1103,6 +1114,7 @@ impl Default for ServerContext {
             ai_deck_manifest: Arc::new(AiDeckManifest::bundled().clone()),
             jev_relay: Default::default(),
             game_executor: Default::default(),
+            hosted_match_spawning: false,
         }
     }
 }
@@ -3146,6 +3158,9 @@ async fn serve() {
         ai_deck_manifest: Arc::new(AiDeckManifest::bundled().clone()),
         jev_relay,
         game_executor: game_executor::GameExecutor::new(game_cpu_permits),
+        // Fenced until the 2c seat-delivery slice (see the field's doc). Flip to
+        // `true` there, together with delivery + unclaimed-session reclamation.
+        hosted_match_spawning: false,
     };
     info!(
         max_connections = server_context.limits.max_connections,
@@ -3408,11 +3423,15 @@ async fn serve() {
         lobby_subscribers.clone(),
         game_db.clone(),
         tournament_hosting.clone(),
-        (mode == ServerMode::Full).then(|| TournamentRehostConfig {
-            db: db.clone(),
-            combos: combos.clone(),
-            executor: server_context.game_executor.clone(),
-            max_games: server_context.limits.max_games,
+        // Also fenced until 2c: the background re-host path spawns the same
+        // unjoinable games (see `ServerContext::hosted_match_spawning`).
+        (mode == ServerMode::Full && server_context.hosted_match_spawning).then(|| {
+            TournamentRehostConfig {
+                db: db.clone(),
+                combos: combos.clone(),
+                executor: server_context.game_executor.clone(),
+                max_games: server_context.limits.max_games,
+            }
         }),
     ));
 
@@ -14068,8 +14087,12 @@ async fn handle_client_message(
             )
             .await;
             // Hosting follows a broker-authorized, committed change on a node
-            // that can run the resulting game and accept its actions.
-            if let (ServerMode::Full, Some(code)) = (mode, tournament_to_host) {
+            // that can run the resulting game and accept its actions — and only
+            // when hosted spawning is enabled (fenced off until 2c seat
+            // delivery; see `ServerContext::hosted_match_spawning`).
+            if let (ServerMode::Full, true, Some(code)) =
+                (mode, context.hosted_match_spawning, tournament_to_host)
+            {
                 maybe_spawn_tournament_matches(
                     &code,
                     TournamentSpawnSource::AcceptedAction,
@@ -17482,6 +17505,32 @@ mod issue_4548_full_create_tests {
         tempfile::TempDir,
         AppState,
     ) {
+        // Hosted-match spawning is fenced off by default (2c); the hosting
+        // tests that use a real deck database exercise the spawn path, so they
+        // enable it. A non-tournament test using this helper is unaffected —
+        // spawning only triggers on a committed tournament action.
+        spawn_server(
+            ServerMode::Full,
+            draft_pools::DraftPools::default(),
+            Arc::new(db),
+            ServerContext {
+                hosted_match_spawning: true,
+                ..ServerContext::default()
+            },
+        )
+        .await
+    }
+
+    /// Like [`spawn_full_mode_server_with_db`] but with hosted-match spawning
+    /// fenced off (the production default), for the fence regression test.
+    pub(super) async fn spawn_fenced_full_mode_server_with_db(
+        db: CardDatabase,
+    ) -> (
+        String,
+        tokio::task::JoinHandle<()>,
+        tempfile::TempDir,
+        AppState,
+    ) {
         spawn_server(
             ServerMode::Full,
             draft_pools::DraftPools::default(),
@@ -20804,8 +20853,8 @@ mod issue_4548_full_create_tests {
 #[cfg(test)]
 mod game_submission_tests {
     use super::issue_4548_full_create_tests::{
-        recv_server_message, send_test_message, spawn_full_mode_server,
-        spawn_full_mode_server_with_db, test_client_hello,
+        recv_server_message, send_test_message, spawn_fenced_full_mode_server_with_db,
+        spawn_full_mode_server, spawn_full_mode_server_with_db, test_client_hello,
     };
     use super::*;
     use engine::game::interaction::MAX_INTERACTION_STRING_LEN;
@@ -21811,6 +21860,88 @@ mod game_submission_tests {
         .await;
         server.abort();
         result.expect("refused tournament actions must finish while hosting is locked");
+    }
+
+    /// With hosted spawning fenced off (production default until 2c seat
+    /// delivery), an accepted tournament action that WOULD host a pairing
+    /// spawns no game: the shared game ceiling is untouched and the pairing
+    /// stays manually reportable (`ReportGate::Open`), and ordinary game
+    /// creation still succeeds afterward. This is the PR #11277 availability
+    /// regression — without the fence this exact sequence hosts a game nobody
+    /// can join (see `a_hosted_tournament_match_is_recovered_after_abandon`,
+    /// which runs the same opening on a hosting-enabled server and observes
+    /// `ReportGate::Hosted` + a spawned game).
+    #[tokio::test]
+    async fn fenced_hosting_spawns_no_game_for_an_accepted_action() {
+        use lobby_broker::tournament::ReportGate;
+
+        let (db, deck) = hosted_tournament_deck_fixture();
+        // A fenced Full server leaves `hosted_match_spawning` off, unlike
+        // `spawn_full_mode_server_with_db`.
+        let (url, server, _temp_dir, app) = spawn_fenced_full_mode_server_with_db(db).await;
+        let code = "TOURNEY";
+        let (pairing_id, _, entrant) = seed_ready_tournament(&app, code, &deck).await;
+
+        let result = tokio::time::timeout(Duration::from_secs(10), async {
+            let mut socket = connect_and_hello(url).await;
+            // An accepted deck submission — the same committed action that hosts
+            // a pairing on an enabled server (reach guard: the Ack proves it
+            // committed and set `tournament_to_host`).
+            let id = TournamentRequestId(1);
+            send_test_message(
+                &mut socket,
+                &ClientMessage::SubmitTournamentDeck {
+                    code: code.to_string(),
+                    player_token: entrant,
+                    deck: deck.clone(),
+                    request_id: Some(id),
+                },
+                false,
+            )
+            .await;
+            assert!(
+                matches!(
+                    recv_server_message(&mut socket).await,
+                    ServerMessage::TournamentActionAck { request_id, .. } if request_id == id
+                ),
+                "reach guard: the readying deck submission must be accepted"
+            );
+
+            // Fenced: no game spawned, no binding, pairing still manually
+            // reportable.
+            let view = get_tournament_view(&mut socket, code).await;
+            assert_eq!(view.pairings[0].id, pairing_id);
+            assert_eq!(
+                view.pairings[0].report_gate,
+                ReportGate::Open,
+                "a fenced pairing is never marked Hosted"
+            );
+            assert_eq!(
+                app.tournament_hosting
+                    .lock()
+                    .await
+                    .game_code_for(code, pairing_id),
+                None,
+                "no hosting binding is recorded while fenced"
+            );
+            assert_eq!(
+                app.sessions.lock().await.game_count(),
+                0,
+                "a fenced accepted action spawns no game, so the ceiling is untouched"
+            );
+
+            // And ordinary game creation still succeeds afterward — the ceiling
+            // was never occupied by a phantom hosted game.
+            let (ordinary_code, _token, _key) =
+                create_started_ai_game_listed(&mut socket, None, false, deck.clone(), None).await;
+            assert!(
+                app.sessions.lock().await.session(&ordinary_code).is_some(),
+                "ordinary game creation succeeds while hosting is fenced"
+            );
+        })
+        .await;
+        server.abort();
+        result.expect("fenced hosting must spawn no game yet still allow ordinary creation");
     }
 
     #[tokio::test]

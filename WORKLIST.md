@@ -56,8 +56,9 @@ contention on that shared cache and can exhaust CPU/RAM (observed:
 `clippy-driver.exe` processes at 1.8–5.7 GB each). `cargo fmt` doesn't
 compile anything and needs no lock.
 
-**Current holder:** `phase1-2b-fence` — PR #11277 fence hosted spawning until 2c (availability finding); compile-gate phase-server only, est ~15m
+**Current holder:** `none`
 
+Held 2026-11-28 by `phase1-2b-fence` for PR #11277 fence (availability blocker from Matt's 2026-11-25 review). **GREEN, pushed head dffd4ceebf** (ff on Matt's 5bd1e4ed0b). Fenced automatic hosted-match spawning behind `ServerContext::hosted_match_spawning` (default false in prod); gates both the AcceptedAction dispatch trigger and the background TournamentRehostConfig. clippy -p phase-server -D warnings clean; `hosted_tournament_match` 4/0, new `fenced_hosting_spawns_no_game_for_an_accepted_action` 1/0 (serial); Gate A PASS head=dffd4ceebf. Fresh review-impl (opus) CLEAN. Spawn helper `spawn_full_mode_server_with_db` enables the flag so Matt's hosting tests still exercise spawning.
 **Released 2026-11-26T23:35:44Z by `onstack-3a-ii-review3`. PHASE 3-i IS ACCEPTED and the
 box is free** — verified before releasing by `/proc/*/exe` basename (zero
 `cargo`/`rustc`/`clippy-driver`/`cargo-clippy`) **and** by an fd scan of
